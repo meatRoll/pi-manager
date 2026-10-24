@@ -1,0 +1,24 @@
+{
+  "name": "pi-manager",
+  "version": "0.3.0",
+  "description": "An isolated TUI manager for Pi profiles, packages, skills, prompts, themes, and context.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/meatRoll/pi-manager.git"
+  },
+  "homepage": "https://github.com/meatRoll/pi-manager#readme",
+  "bugs": "https://github.com/meatRoll/pi-manager/issues",
+  "type": "module",
+  "bin": {
+    "pi-manager": "src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "engines": { "node": ">=22.19.0" },
+  "files": ["src", "README.md"],
+  "private": true,
+  "keywords": ["pi", "pi-coding-agent", "skills", "tui", "profile-manager"],
+  "license": "MIT"
+}
