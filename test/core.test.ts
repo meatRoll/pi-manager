@@ -1,8 +1,9 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, symlink, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, symlink, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { PackageMetadata, ProfileSettings } from '../src/types.js';
 
 const root = await mkdtemp(join(tmpdir(), 'pi-manager-test-'));
 process.env.PI_MANAGER_HOME = join(root, 'manager');
@@ -30,8 +31,8 @@ test('invalid names and symlink profiles cannot redirect writes', async () => {
 
 test('whole-package toggle suppresses every resource and restores exact filters', async () => {
   const entry = { source: 'npm:demo', extensions: ['!legacy/**'], skills: ['skills/a'], autoload: false };
-  const settings = { packages: [structuredClone(entry)] };
-  const meta = {};
+  const settings: ProfileSettings = { packages: [structuredClone(entry)] };
+  const meta: PackageMetadata = {};
   setPackageEnabled(settings, meta, 'npm:demo', false);
   assert.deepEqual(settings.packages[0], { source: 'npm:demo', extensions: [], skills: [], prompts: [], themes: [] });
   setPackageEnabled(settings, meta, 'npm:demo', false);

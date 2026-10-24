@@ -5,20 +5,22 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { safePath, writeJson, readJson, isInside } from './storage.js';
 import { sourceOf, withSource, PACKAGE_STATE_KEY } from './package-state.js';
+import { errorCode } from './errors.js';
+import type { PiSettings, ProfileSettings, PackageMetadata, PackageBindings, WorkerOptions, WorkerSnapshot, PackageWorkerResult, GenerationCandidate, GenerationManifest } from './types.js';
 
 const worker = fileURLToPath(new URL('./sdk-worker.js', import.meta.url));
 export const generationId = () => `${Date.now()}-${randomUUID()}`;
-export function generationPath(root, id) {
+export function generationPath(root: string, id: string) {
   if (!/^\d+-[a-f0-9-]{36}$/.test(id)) throw new Error(`Invalid package generation: ${id}`);
   return join(root, '.packages', id);
 }
 
-export async function verifyOwnedTree(root) {
+export async function verifyOwnedTree(root: string) {
   let stat;
-  try { stat = await lstat(root); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
+  try { stat = await lstat(root); } catch (error) { if (errorCode(error) === 'ENOENT') return; throw error; }
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(`Not an owned package directory: ${root}`);
   const canonical = await realpath(root);
-  async function walk(path) {
+  async function walk(path: string): Promise<void> {
     for (const entry of await readdir(path, { withFileTypes: true })) {
       const file = join(path, entry.name);
       if (entry.isSymbolicLink()) {
@@ -33,9 +35,9 @@ export async function verifyOwnedTree(root) {
 
 // Copy real bytes, never hardlink active files. Dependency symlinks are allowed
 // only within the copied tree and are recreated to point into the new tree.
-export async function copyOwnedTree(source, destination) {
+export async function copyOwnedTree(source: string, destination: string) {
   let info;
-  try { info = await lstat(source); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
+  try { info = await lstat(source); } catch (error) { if (errorCode(error) === 'ENOENT') return; throw error; }
   if (!info.isDirectory() || info.isSymbolicLink()) throw new Error(`Not an owned package directory: ${source}`);
   await verifyOwnedTree(source);
   const canonical = await realpath(source);
@@ -50,7 +52,7 @@ export async function copyOwnedTree(source, destination) {
       return true;
     },
   });
-  async function relocate(path) {
+  async function relocate(path: string): Promise<void> {
     for (const entry of await readdir(path, { withFileTypes: true })) {
       const current = join(path, entry.name);
       if (entry.isSymbolicLink()) {
@@ -65,9 +67,11 @@ export async function copyOwnedTree(source, destination) {
   await relocate(destination);
 }
 
-export async function runPackageWorker(root, args = [], options = {}) {
-  let output = '', truncated = false, failure, result;
-  const code = await new Promise(resolveRun => {
+export function runPackageWorker(root: string, args: string[], options: WorkerOptions & { validate: true }): Promise<WorkerSnapshot>;
+export function runPackageWorker(root: string, args?: string[], options?: WorkerOptions): Promise<PackageWorkerResult>;
+export async function runPackageWorker(root: string, args: string[] = [], options: WorkerOptions = {}): Promise<WorkerSnapshot | PackageWorkerResult> {
+  let output = '', truncated = false, failure: Error | undefined, result: unknown;
+  const code = await new Promise<number>(resolveRun => {
     const custom = options.piCommand;
     const child = spawn(custom || process.execPath, custom ? args : [worker, ...args], {
       cwd: root, shell: false,
@@ -78,7 +82,7 @@ export async function runPackageWorker(root, args = [], options = {}) {
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     });
     child.on('message', message => { result = message; });
-    for (const stream of [child.stdout, child.stderr]) stream.on('data', data => {
+    for (const stream of [child.stdout, child.stderr]) stream!.on('data', data => {
       const text = data.toString(); output += text;
       if (output.length > 8 * 1024 * 1024) { output = output.slice(-8 * 1024 * 1024); truncated = true; }
       options.onOutput?.(text);
@@ -93,20 +97,19 @@ export async function runPackageWorker(root, args = [], options = {}) {
   if (failure) throw failure;
   if (code !== 0) throw new Error(`Package worker exited ${code}`);
   if (!result) throw new Error('Package worker returned no result');
-  return result;
+  return result as WorkerSnapshot | PackageWorkerResult;
 }
 
-export function absoluteEntries(settings, base) {
+export function absoluteEntries(settings: PiSettings, base: string): ProfileSettings {
   const next = structuredClone(settings);
   delete next[PACKAGE_STATE_KEY];
-  next.packages = (next.packages || []).map(entry => {
+  return { ...next, packages: (next.packages || []).map(entry => {
     const source = sourceOf(entry);
     return withSource(entry, source.startsWith('.') ? resolve(base, source) : source);
-  });
-  return next;
+  }) };
 }
 
-export async function prepareGeneration(root, settings, metadata, previousDirectory, options = {}) {
+export async function prepareGeneration(root: string, settings: PiSettings, metadata: PackageMetadata, previousDirectory?: string): Promise<GenerationCandidate> {
   const id = generationId();
   const path = await safePath(generationPath(root, id));
   await mkdir(path, { recursive: true, mode: 0o700 });
@@ -125,12 +128,12 @@ export async function prepareGeneration(root, settings, metadata, previousDirect
   } catch (error) { await rm(path, { recursive: true, force: true }); throw error; }
 }
 
-export async function generationDigest(path) {
+export async function generationDigest(path: string) {
   const hash = createHash('sha256');
-  async function visit(directory) {
+  async function visit(directory: string): Promise<void> {
     let entries;
     try { entries = await readdir(directory, { withFileTypes: true }); }
-    catch (error) { if (error.code === 'ENOENT') { hash.update('missing:' + relative(path, directory)); return; } throw error; }
+    catch (error) { if (errorCode(error) === 'ENOENT') { hash.update('missing:' + relative(path, directory)); return; } throw error; }
     for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name, 'en'))) {
       const file = join(directory, entry.name);
       const stat = await lstat(file);
@@ -148,7 +151,7 @@ export async function generationDigest(path) {
   return hash.digest('hex');
 }
 
-export async function recordGeneration(candidate, settings, metadata, bindings, command) {
+export async function recordGeneration(candidate: GenerationCandidate, settings: PiSettings, metadata: PackageMetadata, bindings: PackageBindings, command: string) {
   await writeJson(join(candidate.path, 'settings.json'), settings);
   await writeJson(join(candidate.path, 'generation.json'), {
     format: 1, id: candidate.id, createdAt: new Date().toISOString(), status: 'ready', command,
@@ -157,12 +160,12 @@ export async function recordGeneration(candidate, settings, metadata, bindings, 
   });
 }
 
-export async function validateGeneration(root, id, options = {}) {
+export async function validateGeneration(root: string, id: string, options: WorkerOptions = {}): Promise<GenerationManifest> {
   const path = await safePath(generationPath(root, id));
   await safePath(join(path, 'settings.json'));
-  const manifest = await readJson(await safePath(join(path, 'generation.json')));
+  const manifest = await readJson<GenerationManifest>(await safePath(join(path, 'generation.json')));
   if (manifest.format !== 1 || manifest.id !== id || manifest.status !== 'ready') throw new Error('Package generation is not ready');
-  const savedSettings = await readJson(join(path, 'settings.json'));
+  const savedSettings = await readJson<PiSettings>(join(path, 'settings.json'));
   if (JSON.stringify(savedSettings.packages || []) !== JSON.stringify(manifest.packages || [])) throw new Error('Package generation settings changed since validation');
   for (const kind of ['npm', 'git']) await verifyOwnedTree(join(path, kind));
   if (manifest.digest !== await generationDigest(path)) throw new Error('Package generation content changed since it was saved; restore refused');

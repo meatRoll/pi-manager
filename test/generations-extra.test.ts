@@ -15,7 +15,7 @@ let sdk; try { sdk = findPiSdk(); } catch {}
 const integration = sdk ? {} : { skip: 'Pi SDK required' };
 after(() => rm(temp, { recursive: true, force: true }));
 
-async function fixture(name, version = '1.0.0') {
+async function fixture(name: string, version = '1.0.0') {
   const source = join(temp, name);
   await mkdir(join(source, 'prompts'), { recursive: true });
   await writeFile(join(source, 'package.json'), JSON.stringify({ name: 'demo', version, pi: { prompts: ['./prompts'] } }));

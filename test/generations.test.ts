@@ -4,6 +4,7 @@ import { mkdtemp, realpath, mkdir, writeFile, readFile, readdir, rm, symlink } f
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { findPiSdk } from '../src/pi-sdk.js';
+import { expectDefined } from './helpers.js';
 
 const temp = await realpath(await mkdtemp(join(tmpdir(), 'pi-manager-generations-')));
 process.env.PI_MANAGER_HOME = join(temp, 'manager');
@@ -11,12 +12,11 @@ const core = await import('../src/core.js');
 const { packageOperation, rollbackPackages, packageVersions, togglePackage } = await import('../src/packages.js');
 const { inventory, toggleResource, createContext } = await import('../src/resources.js');
 const { PACKAGE_STATE_KEY } = await import('../src/package-state.js');
-const { copyOwnedTree } = await import('../src/generations.js');
 let sdk; try { sdk = findPiSdk(); } catch {}
 const integration = sdk ? {} : { skip: 'Pi SDK required' };
 after(() => rm(temp, { recursive: true, force: true }));
 
-async function seed(name) {
+async function seed(name: string) {
   await core.createProfile(name);
   const root = core.profilePath(name);
   const pkg = join(root, 'npm/node_modules/fixture');
@@ -29,7 +29,7 @@ async function seed(name) {
   await core.saveSettings(name, settings);
   return { root, pkg };
 }
-async function fakeWorker(name, code) {
+async function fakeWorker(name: string, code: string) {
   const path = join(temp, name);
   await writeFile(path, `#!/usr/bin/env node\nconst fs=require('node:fs'),p=require('node:path'),r=process.env.PI_CODING_AGENT_DIR;const settings=JSON.parse(fs.readFileSync(p.join(r,'settings.json'),'utf8'));${code}`, { mode: 0o700 });
   return path;
@@ -51,8 +51,8 @@ test('candidate install validates and atomically selects copied package files; r
   assert.deepEqual((await core.getSettings('switch')).packages, ['npm:fixture']);
   let current = await inventory('switch');
   assert.equal(current.packages[0].version, '2.0.0');
-  assert.equal(current.resources.find(r => r.type === 'prompts').source, 'npm:fixture');
-  const a = current.resources.find(r => r.type === 'prompts');
+  assert.equal(expectDefined(current.resources.find(r => r.type === 'prompts')).source, 'npm:fixture');
+  const a = expectDefined(current.resources.find(r => r.type === 'prompts'));
   await toggleResource('switch', a.id, false);
   await togglePackage('switch', 'npm:fixture', false);
   await createContext('switch', 'after-update', 'Keep this unrelated context');
@@ -68,7 +68,7 @@ test('candidate install validates and atomically selects copied package files; r
   current = await inventory('switch');
   assert.equal(current.packages[0].enabled, false);
   await togglePackage('switch', 'npm:fixture', true);
-  assert.equal((await inventory('switch')).resources.find(r => r.type === 'prompts').enabled, false);
+  assert.equal(expectDefined((await inventory('switch')).resources.find(r => r.type === 'prompts')).enabled, false);
   await core.copyProfile('switch', 'copied-generation');
   const copyRaw = JSON.parse(await readFile(join(core.profilePath('copied-generation'), 'settings.json'), 'utf8'));
   assert.equal(copyRaw[PACKAGE_STATE_KEY], undefined);

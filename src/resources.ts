@@ -3,6 +3,8 @@ import { cp, lstat, mkdir, readFile, rm } from 'node:fs/promises';
 import { join, basename, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+import { errorCode } from './errors.js';
+import type { ResourceType, WorkerSnapshot, Resource, ResourcePreview, Inventory } from './types.js';
 import { profileEnv, packageEntries } from './core.js';
 import { packageState } from './package-state.js';
 import {
@@ -11,15 +13,19 @@ import {
 } from './storage.js';
 
 const worker = fileURLToPath(new URL('./sdk-worker.js', import.meta.url));
-export function resourceId(type, path, source) {
+export function parseResourceType(value: string | undefined): ResourceType {
+  if (value === 'context' || RESOURCE_TYPES.some(type => type === value)) return value as ResourceType;
+  throw new Error(`Unknown resource type: ${value}`);
+}
+export function resourceId(type: ResourceType, path: string, source: string) {
   return createHash('sha256').update(`${type}\0${source}\0${path}`).digest('hex').slice(0, 12);
 }
 
-export async function inventory(profile) {
+export async function inventory(profile: string): Promise<Inventory> {
   const root = await assertProfile(profile);
   const settings = await getSettings(profile);
   const metadata = await getMetadata(profile);
-  const snapshot = await new Promise((resolveInventory, reject) => {
+  const snapshot = await new Promise<WorkerSnapshot>((resolveInventory, reject) => {
     let stdout = '', stderr = '';
     const child = spawn(process.execPath, [worker], {
       cwd: root, env: { ...profileEnv(profile), PI_OFFLINE: '1' },
@@ -34,12 +40,12 @@ export async function inventory(profile) {
     });
   });
   const bindings = packageState(settings)?.bindings || {};
-  const logicalSource = source => Object.entries(bindings).find(([, path]) => path === source)?.[0] || source;
+  const logicalSource = (source: string) => Object.entries(bindings).find(([, path]) => path === source)?.[0] || source;
   const packages = packageEntries(settings, root, metadata).map(item => {
     const installed = snapshot.packages.find(pkg => logicalSource(pkg.source) === item.source);
     return { ...item, ...installed, source: item.source, enabled: item.enabled };
   });
-  const resources = [];
+  const resources: Resource[] = [];
   for (const type of RESOURCE_TYPES) {
     for (const resource of snapshot.paths[type] || []) {
       const { path, enabled, metadata: sourceMeta } = resource;
@@ -60,14 +66,14 @@ export async function inventory(profile) {
   return { profile, root, packages, resources: resources.sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name)) };
 }
 
-async function findResource(profile, id) {
+async function findResource(profile: string, id: string) {
   const current = await inventory(profile);
   const resource = current.resources.find(item => item.id === id);
   if (!resource) throw new Error(`Resource not found: ${id}. Refresh the resource list.`);
   return { current, resource };
 }
 
-export async function previewResource(profile, id) {
+export async function previewResource(profile: string, id: string): Promise<ResourcePreview> {
   const { current, resource } = await findResource(profile, id);
   let path = resource.path;
   if (resource.owned) await assertContainedFile(join(current.root, 'resources'), path);
@@ -86,12 +92,13 @@ export async function previewResource(profile, id) {
   } finally { await file.close(); }
 }
 
-export async function toggleResource(profile, id, enabled) {
+export async function toggleResource(profile: string, id: string, enabled: boolean) {
   return withProfileLock(profile, async root => {
     const { resource } = await findResource(profile, id);
     if (resource.type === 'context') {
       const meta = await getMetadata(profile);
       const item = meta.contexts.find(item => join(root, item.path) === resource.path);
+      if (!item) throw new Error('Context is no longer configured');
       item.enabled = enabled;
       await saveMetadata(profile, meta);
       return;
@@ -99,9 +106,10 @@ export async function toggleResource(profile, id, enabled) {
     const settings = await getSettings(profile);
     let patterns, baseDir;
     if (resource.origin === 'package') {
-      const index = settings.packages.findIndex(entry => (typeof entry === 'string' ? entry : entry.source) === resource.source);
+      const entries = settings.packages || [];
+      const index = entries.findIndex(entry => (typeof entry === 'string' ? entry : entry.source) === resource.source);
       if (index < 0) throw new Error('Package source is no longer configured');
-      const old = settings.packages[index];
+      const old = entries[index];
       const entry = typeof old === 'string' ? { source: old } : { ...old };
       if (Object.hasOwn((await getMetadata(profile)).disabledPackages || {}, entry.source)) throw new Error('Enable the package before editing its resources');
       patterns = [...entry[resource.type] || []];
@@ -113,7 +121,7 @@ export async function toggleResource(profile, id, enabled) {
       const target = relative(baseDir, resource.path).split('\\').join('/');
       patterns = patterns.filter(pattern => pattern !== `+${target}` && pattern !== `-${target}`);
       entry[resource.type] = [...patterns, `${enabled ? '+' : '-'}${target}`];
-      settings.packages[index] = entry;
+      entries[index] = entry;
     } else {
       patterns = [...settings[resource.type] || []].filter(pattern => pattern !== `+${resource.path}` && pattern !== `-${resource.path}`);
       settings[resource.type] = [...patterns, `${enabled ? '+' : '-'}${resource.path}`];
@@ -122,7 +130,7 @@ export async function toggleResource(profile, id, enabled) {
   });
 }
 
-export async function importResource(profile, type, source, name) {
+export async function importResource(profile: string, type: ResourceType, source: string, name?: string) {
   if (![...RESOURCE_TYPES, 'context'].includes(type)) throw new Error(`Unknown resource type: ${type}`);
   return withProfileLock(profile, async root => {
     const input = resolve(source);
@@ -143,7 +151,7 @@ export async function importResource(profile, type, source, name) {
     const extension = stat.isDirectory() ? '' : type === 'themes' ? '.json' : type === 'extensions' ? input.slice(input.lastIndexOf('.')) : '.md';
     const destination = await safePath(join(root, 'resources', type, name + extension));
     try { await lstat(destination); throw new Error(`Resource already exists: ${name}`); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    catch (error) { if (errorCode(error) !== 'ENOENT') throw error; }
     await mkdir(dirname(destination), { recursive: true, mode: 0o700 });
     try {
       await cp(input, destination, { recursive: stat.isDirectory(), errorOnExist: true, force: false, verbatimSymlinks: true,
@@ -165,7 +173,7 @@ export async function importResource(profile, type, source, name) {
   });
 }
 
-export async function createContext(profile, name, text = '') {
+export async function createContext(profile: string, name: string, text = '') {
   validName(name);
   return withProfileLock(profile, async root => {
     const meta = await getMetadata(profile);
@@ -179,7 +187,7 @@ export async function createContext(profile, name, text = '') {
   });
 }
 
-export async function writeResource(profile, id, text) {
+export async function writeResource(profile: string, id: string, text: string) {
   return withProfileLock(profile, async root => {
     const { resource } = await findResource(profile, id);
     if (!resource.owned) throw new Error('External/package resources are read-only. Import a copy to edit.');
@@ -194,7 +202,7 @@ export async function writeResource(profile, id, text) {
   });
 }
 
-export async function removeResource(profile, id) {
+export async function removeResource(profile: string, id: string) {
   return withProfileLock(profile, async root => {
     const { resource } = await findResource(profile, id);
     if (!resource.owned) throw new Error('Cannot delete package/external resources. Disable them or remove their package.');

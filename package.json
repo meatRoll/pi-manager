@@ -1,6 +1,6 @@
 {
   "name": "pi-manager",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "An isolated TUI manager for Pi profiles, packages, skills, prompts, themes, and context.",
   "repository": {
     "type": "git",
@@ -10,15 +10,34 @@
   "bugs": "https://github.com/meatRoll/pi-manager/issues",
   "type": "module",
   "bin": {
-    "pi-manager": "src/index.js"
+    "pi-manager": "dist/index.js"
   },
   "scripts": {
-    "start": "node src/index.js",
-    "test": "node --test"
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "start": "npm run build && node dist/index.js",
+    "test": "tsc -p tsconfig.test.json && node --test .test-dist/test/*.test.js",
+    "prepack": "npm run build"
   },
-  "engines": { "node": ">=22.19.0" },
-  "files": ["src", "README.md"],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "README.zh-CN.md"
+  ],
   "private": true,
-  "keywords": ["pi", "pi-coding-agent", "skills", "tui", "profile-manager"],
-  "license": "MIT"
+  "keywords": [
+    "pi",
+    "pi-coding-agent",
+    "skills",
+    "tui",
+    "profile-manager"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5.9.3"
+  }
 }

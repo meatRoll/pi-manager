@@ -3,15 +3,17 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { PACKAGE_STATE_KEY } from './package-state.js';
+import { errorCode } from './errors.js';
+import type { PiSettings, PackageMetadata, RunOptions, PiRunOptions } from './types.js';
 import {
   MANAGER_HOME, PROFILES_DIR, profilePath, validName, ensureManagerHome,
-  readJson, writeJson, safePath, assertProfile, assertContainedFile, getSettings, saveSettings,
+  writeJson, safePath, assertProfile, assertContainedFile, getSettings, saveSettings,
   getMetadata, saveMetadata, getState, setDefaultProfile, listProfiles, withProfileLock,
 } from './storage.js';
 export { MANAGER_HOME, PROFILES_DIR, profilePath, ensureManagerHome, assertProfile, getSettings,
   saveSettings, getMetadata, saveMetadata, getState, setDefaultProfile, listProfiles, withProfileLock };
 
-export async function createProfile(name) {
+export async function createProfile(name: string) {
   await ensureManagerHome();
   const root = await safePath(profilePath(name));
   await mkdir(root, { mode: 0o700 }); // no recursive: existing profiles must not be overwritten
@@ -29,7 +31,7 @@ export async function createProfile(name) {
   } catch (error) { await rm(root, { recursive: true, force: true }); throw error; }
 }
 
-export async function deleteProfile(name) {
+export async function deleteProfile(name: string) {
   await withProfileLock(name, async root => {
     // Keep the lock until all other content is gone.
     for (const entry of await readdir(root)) if (entry !== '.lock') await rm(await safePath(join(root, entry)), { recursive: true, force: true });
@@ -38,14 +40,14 @@ export async function deleteProfile(name) {
   if ((await getState()).defaultProfile === name) await setDefaultProfile((await listProfiles())[0]?.name ?? null);
 }
 
-export async function copyProfile(from, to) {
+export async function copyProfile(from: string, to: string) {
   validName(to);
   return withProfileLock(from, async source => {
     const destination = await createProfile(to);
     try {
       const settings = structuredClone(await getSettings(from));
       delete settings[PACKAGE_STATE_KEY]; // copied profiles never share writable generation state
-      const rebase = value => {
+      const rebase = (value: string) => {
         if (value === source || value.startsWith(`${source}/`)) return destination + value.slice(source.length);
         if (value.startsWith('.') || value.startsWith('~') || value.startsWith('/')) return resolveSourcePath(value, source);
         return value;
@@ -54,7 +56,7 @@ export async function copyProfile(from, to) {
         ? rebase(entry) : { ...entry, source: rebase(entry.source) });
       // Imported resources are profile-relative and copied below. Other explicit
       // resource paths are rebased to retain their original meaning.
-      for (const type of ['extensions', 'skills', 'prompts', 'themes']) {
+      for (const type of ['extensions', 'skills', 'prompts', 'themes'] as const) {
         settings[type] = (settings[type] || []).map(value => {
           const prefix = /^[+!-]/.test(value) ? value[0] : '';
           const path = prefix ? value.slice(1) : value;
@@ -73,33 +75,33 @@ export async function copyProfile(from, to) {
           recursive: true, verbatimSymlinks: true,
           filter: async path => { if ((await lstat(path)).isSymbolicLink()) throw new Error('Cannot copy symlinked resources'); return true; },
         });
-      } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      } catch (error) { if (errorCode(error) !== 'ENOENT') throw error; }
       return destination;
     } catch (error) { await deleteProfile(to); throw error; }
   });
 }
 
-export function resolveSourcePath(source, cwd = process.cwd()) {
+export function resolveSourcePath(source: string, cwd = process.cwd()) {
   if (typeof source !== 'string' || !source.trim() || source.startsWith('-') || /[\0\r\n]/.test(source)) throw new Error('Invalid package source');
   const value = source.trim().replace(/^file:/, '');
   if (value === '~' || value.startsWith('~/')) return resolve(homedir(), value.slice(2));
   if (value.startsWith('.') || value.startsWith('/')) return resolve(cwd, value);
   return value;
 }
-export function packageEntries(settings, baseDir = process.cwd(), metadata = {}) {
+export function packageEntries(settings: PiSettings, baseDir = process.cwd(), metadata: PackageMetadata = {}) {
   return (settings.packages || []).map((entry, index) => {
     const source = typeof entry === 'string' ? entry : entry.source;
     return { index, source, identity: resolveSourcePath(source, baseDir), entry,
       enabled: !Object.hasOwn(metadata.disabledPackages || {}, source) };
   });
 }
-export function profileEnv(name, extra = {}) {
+export function profileEnv(name: string, extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   const env = { ...process.env, ...extra, PI_CODING_AGENT_DIR: profilePath(name), PI_CODING_AGENT_SESSION_DIR: join(profilePath(name), 'sessions') };
   return env;
 }
 
-export function run(command, args, options = {}) {
-  return new Promise((resolveRun, reject) => {
+export function run(command: string, args: string[], options: RunOptions = {}): Promise<number> {
+  return new Promise<number>((resolveRun, reject) => {
     const child = spawn(command, args, {
       cwd: options.cwd || process.cwd(), env: options.env || process.env,
       stdio: options.stdio || 'inherit', shell: false,
@@ -109,10 +111,10 @@ export function run(command, args, options = {}) {
   });
 }
 
-export async function runPi(name, args = [], options = {}) {
+export async function runPi(name: string, args: string[] = [], options: PiRunOptions = {}) {
   return withProfileLock(name, async root => {
     const metadata = await getMetadata(name);
-    const contextArgs = [];
+    const contextArgs: string[] = [];
     for (const context of metadata.contexts || []) {
       if (context.enabled) {
         const path = await safePath(join(root, context.path));
@@ -129,7 +131,7 @@ export async function runPi(name, args = [], options = {}) {
   });
 }
 
-export async function readProfileInstructions(name) {
+export async function readProfileInstructions(name: string) {
   const root = await assertProfile(name);
   const meta = await getMetadata(name);
   return Promise.all((meta.contexts || []).map(async context => ({

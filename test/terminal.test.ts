@@ -4,11 +4,8 @@ import { PassThrough } from 'node:stream';
 import { Terminal } from '../src/terminal.js';
 
 function terminal() {
-  const input = new PassThrough();
-  const output = new PassThrough();
-  input.isTTY = output.isTTY = true;
-  input.setRawMode = () => {};
-  output.rows = 24; output.columns = 80;
+  const input = Object.assign(new PassThrough(), { isTTY: true, setRawMode: () => {} });
+  const output = Object.assign(new PassThrough(), { isTTY: true, rows: 24, columns: 80 });
   output.resume();
   const ui = new Terminal(input, output);
   return { ui, input };
@@ -31,6 +28,8 @@ test('TUI searches, exits input mode and toggles selected result', async () => {
   for (const char of 'beta') ui.onKey(char, { name: char });
   ui.onKey('\r', { name: 'return' });
   ui.onKey(' ', { name: 'space' });
-  assert.equal((await selection).entry.label, 'beta');
+  const result = await selection;
+  assert.ok(result);
+  assert.equal(result.entry.label, 'beta');
   ui.stop();
 });

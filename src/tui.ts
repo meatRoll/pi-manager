@@ -2,11 +2,21 @@ import { readFile, readdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Terminal } from './terminal.js';
+import type { MenuEntry } from './terminal.js';
+import { errorCode, errorMessage } from './errors.js';
+import type { Resource, ResourceType, InventoryPackage, ProfileSummary } from './types.js';
+
+interface TuiEntry extends MenuEntry {
+  value?: string;
+  resource?: Resource;
+  pkg?: InventoryPackage;
+  profile?: ProfileSummary;
+}
 import { listProfiles, getState, createProfile, copyProfile, deleteProfile, setDefaultProfile, profilePath, runPi, run } from './core.js';
 import { packageOperation, inspectPackage, togglePackage, packageVersions, rollbackPackages } from './packages.js';
-import { inventory, previewResource, toggleResource, importResource, createContext, writeResource, removeResource } from './resources.js';
+import { inventory, previewResource, toggleResource, importResource, createContext, writeResource, removeResource, parseResourceType } from './resources.js';
 
-export async function editResource(profile, resource, ui) {
+export async function editResource(profile: string, resource: Resource, ui?: Terminal) {
   const preview = await previewResource(profile, resource.id);
   if (preview.truncated) throw new Error('File is too large for in-manager editing');
   const temporary = await mkdtemp(join(tmpdir(), 'pi-manager-edit-'));
@@ -25,30 +35,31 @@ export async function editResource(profile, resource, ui) {
 
 export async function openTui() {
   const ui = new Terminal(); ui.start();
-  const notice = text => { ui.queue = []; return ui.view('Notice', text); };
-  const guard = async action => { try { return await action(); } catch (error) { ui.queue = []; await ui.view('Error', error.message); } };
-  const packageRun = async (profile, command, source) => {
-    let lines = [];
+  const notice = (text: string) => { ui.queue = []; return ui.view('Notice', text); };
+  const guard = async (action: () => unknown | Promise<unknown>) => { try { return await action(); } catch (error) { ui.queue = []; await ui.view('Error', errorMessage(error)); } };
+  const packageRun = async (profile: string, command: string, source?: string) => {
+    let lines: string[] = [];
     const result = await packageOperation(profile, command, source, { onOutput: text => {
       lines = [...lines, ...text.split(/\r?\n/)].slice(-100);
       ui.draw(`${command} package`, lines.slice(-Math.max(1, (process.stdout.rows || 24) - 5)), ' Running… package changes apply next launch.');
     } });
     await notice(`Saved package generation: ${result.generation}\nPrevious: ${result.previous || 'none (no complete baseline)'}\nChanges apply next launch.\nLog: ${result.logPath}`);
   };
-  const addPackage = async profile => {
+  const addPackage = async (profile: string) => {
     const source = await ui.inputText('Add package', 'npm:package@version, git:host/owner/repo, or an absolute local path');
     if (!source) return;
     const info = await inspectPackage(source);
     await ui.view('Package inspection', JSON.stringify(info, null, 2));
     if (await ui.confirm('Install package?', 'Third-party extensions and install scripts execute with your account permissions.')) await packageRun(profile, 'add', source);
   };
-  const packagePage = async (profile, pkg) => {
+  const packagePage = async (profile: string, pkg: InventoryPackage) => {
     while (true) {
       const current = await inventory(profile);
-      pkg = current.packages.find(item => item.source === pkg.source);
-      if (!pkg) return;
+      const configured = current.packages.find(item => item.source === pkg.source);
+      if (!configured) return;
+      pkg = configured;
       const owned = current.resources.filter(resource => resource.origin === 'package' && resource.source === pkg.source);
-      const result = await ui.select(pkg.name || pkg.source, [
+      const result = await ui.select<TuiEntry>(pkg.name || pkg.source, [
         { label: pkg.enabled ? 'Disable package' : 'Enable package', value: 'toggle' },
         { label: 'View package details', value: 'detail' },
         { label: 'Update package', value: 'update' },
@@ -56,16 +67,17 @@ export async function openTui() {
         ...owned.map(resource => ({ label: `[${resource.enabled ? 'x' : ' '}] ${resource.type}: ${resource.name}`, resource, toggle: true })),
       ], `${pkg.version || 'local'} · ${pkg.enabled ? 'enabled' : 'disabled'} · next-launch configuration`);
       if (!result) return;
-      if (result.entry.resource) {
-        if (result.action === 'toggle') await guard(() => toggleResource(profile, result.entry.resource.id, !result.entry.resource.enabled));
-        else await resourcePage(profile, result.entry.resource);
+      const resource = result.entry.resource;
+      if (resource) {
+        if (result.action === 'toggle') await guard(() => toggleResource(profile, resource.id, !resource.enabled));
+        else await resourcePage(profile, resource);
       } else if (result.entry.value === 'toggle') await guard(() => togglePackage(profile, pkg.source, !pkg.enabled));
       else if (result.entry.value === 'detail') await ui.view('Package details', JSON.stringify(pkg, null, 2));
       else if (result.entry.value === 'update') await guard(() => packageRun(profile, 'update', pkg.source));
       else if (result.entry.value === 'remove' && await ui.confirm('Uninstall?', pkg.source)) { await guard(() => packageRun(profile, 'remove', pkg.source)); return; }
     }
   };
-  const resourcePage = async (profile, resource) => {
+  const resourcePage = async (profile: string, resource: Resource) => {
     const result = await ui.select(resource.name, [
       { label: 'Preview', value: 'preview' },
       { label: resource.enabled ? 'Disable' : 'Enable', value: 'toggle' },
@@ -81,44 +93,46 @@ export async function openTui() {
       else if (result.entry.value === 'delete' && await ui.confirm('Delete owned resource?', resource.name)) await removeResource(profile, resource.id);
     });
   };
-  const resourcesPage = async (profile, type) => {
+  const resourcesPage = async (profile: string, type: ResourceType | null) => {
     while (true) {
       ui.draw('Resources', [' Reading Pi resource metadata (extensions are not executed)…']);
       const current = await inventory(profile);
       ui.queue = [];
       const entries = current.resources.filter(resource => !type || resource.type === type);
-      const result = await ui.select(type || 'All resources', [
+      const result = await ui.select<TuiEntry>(type || 'All resources', [
         { label: '+ Import local resource', value: 'import' },
         ...(type === 'context' ? [{ label: '+ Create context', value: 'create' }] : []),
         ...entries.map(resource => ({ label: `[${resource.enabled ? 'x' : ' '}] ${resource.name}`, detail: `${resource.type} · ${resource.origin}${resource.owned ? ' · owned' : ''}`, resource, toggle: true })),
       ], 'Space toggles next-launch enablement. Package/external originals are read-only.');
       if (!result) return;
-      if (result.entry.resource) {
-        if (result.action === 'toggle') await guard(() => toggleResource(profile, result.entry.resource.id, !result.entry.resource.enabled));
-        else await resourcePage(profile, result.entry.resource);
+      const resource = result.entry.resource;
+      if (resource) {
+        if (result.action === 'toggle') await guard(() => toggleResource(profile, resource.id, !resource.enabled));
+        else await resourcePage(profile, resource);
       } else if (result.entry.value === 'create') {
         const name = await ui.inputText('New context', 'Name (without .md)');
         if (name) await guard(async () => {
           await createContext(profile, name, `# ${name}\n\n`);
           const resource = (await inventory(profile)).resources.find(item => item.type === 'context' && item.name === name);
+          if (!resource) throw new Error('Created context was not discovered');
           await editResource(profile, resource, ui);
         });
       } else {
-        const kind = type || (await ui.select('Resource type', ['skills', 'extensions', 'prompts', 'themes', 'context'].map(value => ({ label: value, value }))))?.entry.value;
+        const kind = type || (await ui.select('Resource type', (['skills', 'extensions', 'prompts', 'themes', 'context'] as const).map(value => ({ label: value, value }))))?.entry.value;
         if (!kind) continue;
         const source = await ui.inputText('Import resource', 'Path to a skill/extension directory or a Markdown/JSON/module file. A copy is made.');
         if (source) await guard(() => importResource(profile, kind, source));
       }
     }
   };
-  const logsPage = async profile => {
-    let files;
+  const logsPage = async (profile: string) => {
+    let files: string[];
     try { files = (await readdir(join(profilePath(profile), '.operations'))).filter(name => name.endsWith('.log')).sort().reverse(); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; files = []; }
+    catch (error) { if (errorCode(error) !== 'ENOENT') throw error; files = []; }
     const result = await ui.select('Package operation logs', files.map(file => ({ label: file, value: file })), 'Logs may contain registry diagnostics. Review before sharing.');
     if (result) await ui.view(result.entry.value, await readFile(join(profilePath(profile), '.operations', result.entry.value), 'utf8'));
   };
-  const versionsPage = async profile => {
+  const versionsPage = async (profile: string) => {
     const versions = await packageVersions(profile);
     const selected = await ui.select('Package generations', [
       { label: 'View generation status', value: 'status' },
@@ -130,7 +144,7 @@ export async function openTui() {
       await notice(`Restored ${restored.generation} for the next launch.\nLog: ${restored.logPath}`);
     }
   };
-  const profilePage = async profile => {
+  const profilePage = async (profile: string) => {
     while (true) {
       const result = await ui.select(profile, [
         { label: 'Run Pi', value: 'run' }, { label: 'Packages', value: 'packages' },
@@ -156,18 +170,18 @@ export async function openTui() {
         } else if (value === 'packages') {
           while (true) {
             const current = await inventory(profile);
-            const choice = await ui.select('Packages', [{ label: '+ Add package', value: 'add' }, { label: 'Update all packages', value: 'update' },
+            const choice = await ui.select<TuiEntry>('Packages', [{ label: '+ Add package', value: 'add' }, { label: 'Update all packages', value: 'update' },
               ...current.packages.map(pkg => ({ label: `[${pkg.enabled ? 'x' : ' '}] ${pkg.name || pkg.source}`, detail: pkg.version, pkg, toggle: true })),
             ], 'Installed ≠ enabled. All changes apply on the next launch.');
             if (!choice) break;
             await guard(async () => {
               if (choice.entry.value === 'add') await addPackage(profile);
               else if (choice.entry.value === 'update') await packageRun(profile, 'update');
-              else if (choice.action === 'toggle') await togglePackage(profile, choice.entry.pkg.source, !choice.entry.pkg.enabled);
-              else await packagePage(profile, choice.entry.pkg);
+              else if (choice.entry.pkg && choice.action === 'toggle') await togglePackage(profile, choice.entry.pkg.source, !choice.entry.pkg.enabled);
+              else if (choice.entry.pkg) await packagePage(profile, choice.entry.pkg);
             });
           }
-        } else await resourcesPage(profile, value === 'all' ? null : value);
+        } else await resourcesPage(profile, value === 'all' ? null : parseResourceType(value));
       });
       if (value === 'delete' && !(await listProfiles()).some(item => item.name === profile)) return;
     }
@@ -176,7 +190,7 @@ export async function openTui() {
     while (true) {
       const profiles = await listProfiles();
       const state = await getState();
-      const result = await ui.select('Profiles', [
+      const result = await ui.select<TuiEntry>('Profiles', [
         ...profiles.map(profile => ({ label: `${profile.name === state.defaultProfile ? '★ ' : ''}${profile.name}`, detail: profile.path, profile })),
         { label: '+ Create profile', value: 'create' }, { label: 'Quit', value: 'quit' },
       ], 'Independent profiles. Default Pi and project .pi files are not managed.');

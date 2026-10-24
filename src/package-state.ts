@@ -1,10 +1,12 @@
+import type { PackageEntry, PackageState, PiSettings } from './types.js';
+
 // One atomic profile/settings.json write selects the package generation and its
 // resource filters together. Pi only sees ordinary local package sources.
 export const PACKAGE_STATE_KEY = 'piManagerPackages';
-export const sourceOf = entry => typeof entry === 'string' ? entry : entry.source;
-export const withSource = (entry, source) => typeof entry === 'string' ? source : { ...entry, source };
+export const sourceOf = (entry: PackageEntry): string => typeof entry === 'string' ? entry : entry.source;
+export const withSource = (entry: PackageEntry, source: string): PackageEntry => typeof entry === 'string' ? source : { ...entry, source };
 
-export function packageState(raw) {
+export function packageState(raw: PiSettings): PackageState | null {
   const state = raw[PACKAGE_STATE_KEY];
   if (!state) return null;
   if (state.format !== 1 || typeof state.active !== 'string' || typeof state.bindings !== 'object' || state.bindings === null || Array.isArray(state.bindings)
@@ -13,7 +15,7 @@ export function packageState(raw) {
   }
   return state;
 }
-export function logicalSettings(raw) {
+export function logicalSettings(raw: PiSettings): PiSettings {
   const settings = structuredClone(raw);
   const state = packageState(raw);
   if (state) {
@@ -22,7 +24,7 @@ export function logicalSettings(raw) {
   }
   return settings;
 }
-export function physicalSettings(settings, state = packageState(settings)) {
+export function physicalSettings(settings: PiSettings, state = packageState(settings)): PiSettings {
   const raw = structuredClone(settings);
   if (state) {
     raw[PACKAGE_STATE_KEY] = structuredClone(state);
@@ -30,6 +32,6 @@ export function physicalSettings(settings, state = packageState(settings)) {
   }
   return raw;
 }
-export function isRemoteSource(source) {
+export function isRemoteSource(source: string) {
   return /^(?:npm:|git:|https?:\/\/|ssh:|git\+|git@)/.test(source);
 }

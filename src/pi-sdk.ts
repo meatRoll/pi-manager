@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve, delimiter } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import type { PiSdk } from './types.js';
 
 const PACKAGE = '@earendil-works/pi-coding-agent';
 const require = createRequire(import.meta.url);
@@ -34,11 +35,11 @@ export function findPiSdk() {
   throw new Error('Pi SDK not found. Set PI_MANAGER_SDK_PATH to an installed @earendil-works/pi-coding-agent directory.');
 }
 
-export async function loadPiSdk() {
+export async function loadPiSdk(): Promise<PiSdk> {
   let path = findPiSdk();
   if (existsSync(join(path, 'package.json'))) {
     const manifest = JSON.parse(readFileSync(join(path, 'package.json'), 'utf8'));
     path = resolve(path, manifest.main || 'dist/index.js');
   }
-  return import(pathToFileURL(path).href);
+  return import(pathToFileURL(path).href) as Promise<PiSdk>;
 }

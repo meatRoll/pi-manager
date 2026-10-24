@@ -20,7 +20,7 @@ let sdk; try { sdk = findPiSdk(); } catch {}
 after(() => rm(temp, { recursive: true, force: true }));
 
 test('real npm packages install in candidates, replace versions, remove and restore without downloads', sdk ? {} : { skip: 'Pi SDK required' }, async () => {
-  const tarballs = {};
+  const tarballs: Record<string, Buffer> = {};
   for (const version of ['1.0.0', '2.0.0']) {
     const directory = join(temp, version); const pkg = join(directory, 'package');
     await mkdir(join(pkg, 'prompts'), { recursive: true });
@@ -31,9 +31,9 @@ test('real npm packages install in candidates, replace versions, remove and rest
     assert.equal(packed.status, 0);
     tarballs[version] = await readFile(archive);
   }
-  let origin;
+  let origin: string;
   const server = createServer((request, response) => {
-    const path = new URL(request.url, origin).pathname;
+    const path = new URL(request.url || '/', origin).pathname;
     const archive = Object.entries(tarballs).find(([version]) => path === `/generation-fixture/-/${version}.tgz`);
     if (archive) { response.writeHead(200, { 'Content-Type': 'application/octet-stream' }); response.end(archive[1]); return; }
     if (path !== '/generation-fixture') { response.writeHead(404); response.end('{}'); return; }
@@ -44,8 +44,10 @@ test('real npm packages install in candidates, replace versions, remove and rest
     response.writeHead(200, { 'Content-Type': 'application/json' });
     response.end(JSON.stringify({ name: 'generation-fixture', 'dist-tags': { latest: '2.0.0' }, versions }));
   });
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  origin = `http://127.0.0.1:${server.address().port}`;
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== 'string');
+  origin = `http://127.0.0.1:${address.port}`;
   try {
     await core.createProfile('real-npm');
     const settings = await core.getSettings('real-npm');
@@ -56,6 +58,7 @@ test('real npm packages install in candidates, replace versions, remove and rest
     const initial = await inventory('real-npm');
     assert.equal(initial.packages[0].version, '1.0.0');
     const firstPath = initial.packages[0].installedPath;
+    assert.ok(firstPath);
     await packageOperation('real-npm', 'add', 'npm:generation-fixture@2.0.0', options);
     assert.equal((await inventory('real-npm')).packages[0].version, '2.0.0');
     assert.equal(await readFile(join(firstPath, 'prompts/demo.md'), 'utf8'), 'content 1.0.0');

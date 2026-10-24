@@ -1,11 +1,21 @@
 import readline from 'node:readline';
+import type { Key } from 'node:readline';
+import type { Readable, Writable } from 'node:stream';
+
+export interface TerminalInput extends Readable {
+  isTTY?: boolean;
+  setRawMode(mode: boolean): unknown;
+}
+export interface TerminalOutput extends Writable { isTTY?: boolean; rows?: number; columns?: number }
+export interface MenuEntry { label: string; detail?: string; toggle?: boolean }
+export interface KeyEvent { text: string | undefined; key: Key }
 
 // Remove terminal controls from all untrusted metadata/content before rendering.
-export function plain(text) {
+export function plain(text: unknown) {
   return String(text ?? '').replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '')
     .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '').replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, '');
 }
-export function clip(text, width) {
+export function clip(text: unknown, width: number) {
   let result = '', used = 0;
   for (const char of plain(text).replace(/[\r\n\t]/g, ' ')) {
     const cells = /[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe6f\uff00-\uff60\u{1f300}-\u{1faff}]/u.test(char) ? 2 : /\p{Mark}/u.test(char) ? 0 : 1;
@@ -16,7 +26,16 @@ export function clip(text, width) {
 }
 
 export class Terminal {
-  constructor(input = process.stdin, output = process.stdout) {
+  input: TerminalInput;
+  output: TerminalOutput;
+  pending: ((event: KeyEvent) => void) | null;
+  active: boolean;
+  queue: KeyEvent[];
+  redraw: (() => void) | null = null;
+  onKey: (text: string | undefined, key?: Key) => void;
+  onResize: () => void;
+
+  constructor(input: TerminalInput = process.stdin, output: TerminalOutput = process.stdout) {
     this.input = input; this.output = output; this.pending = null; this.active = false; this.queue = [];
     this.onKey = (text, key = {}) => {
       const event = key.ctrl && key.name === 'c' ? { text: '', key: { name: 'escape' } } : { text, key };
@@ -41,15 +60,15 @@ export class Terminal {
     this.input.setRawMode(false); this.input.pause();
     this.output.write('\x1b[?25h\x1b[?1049l');
   }
-  async suspend(action) {
+  async suspend<T>(action: () => T | Promise<T>): Promise<T> {
     this.stop();
     try { return await action(); } finally { this.start(); }
   }
-  key() {
-    if (this.queue.length) return Promise.resolve(this.queue.shift());
-    return new Promise(resolve => { this.pending = result => { this.pending = null; resolve(result); }; });
+  key(): Promise<KeyEvent> {
+    if (this.queue.length) return Promise.resolve(this.queue.shift()!);
+    return new Promise<KeyEvent>(resolve => { this.pending = result => { this.pending = null; resolve(result); }; });
   }
-  draw(title, lines, footer = '') {
+  draw(title: string, lines: string[], footer = '') {
     const width = Math.max(20, this.output.columns || 80);
     const height = Math.max(6, this.output.rows || 24);
     const rows = [clip(` pi-manager  /  ${title}`, width), '─'.repeat(width), ...lines.slice(0, height - 4).map(line => clip(line, width))];
@@ -57,7 +76,7 @@ export class Terminal {
     rows.push(clip(footer, width));
     this.output.write('\x1b[H\x1b[2J' + rows.join('\r\n'));
   }
-  async select(title, entries, hint = '') {
+  async select<T extends MenuEntry>(title: string, entries: T[], hint = ''): Promise<{ entry: T; action: 'open' | 'toggle' } | null> {
     let selected = 0, query = '', searching = false;
     const matches = () => entries.filter(entry => plain(`${entry.label} ${entry.detail || ''}`).toLowerCase().includes(query.toLowerCase()));
     this.redraw = () => {
@@ -83,7 +102,7 @@ export class Terminal {
       }
     } finally { this.redraw = null; }
   }
-  async inputText(title, hint = '', initial = '') {
+  async inputText(title: string, hint = '', initial = '') {
     let value = initial;
     this.redraw = () => this.draw(title, [hint, '', ` > ${value}▏`], ' Enter confirm · Esc cancel');
     try {
@@ -96,11 +115,11 @@ export class Terminal {
       }
     } finally { this.redraw = null; }
   }
-  async confirm(title, message) {
+  async confirm(title: string, message: string) {
     const chosen = await this.select(title, [{ label: 'Cancel', value: false }, { label: 'Confirm', value: true }], message);
     return chosen?.entry.value === true;
   }
-  async view(title, text) {
+  async view(title: string, text: unknown) {
     const lines = plain(text).split(/\r?\n/); let offset = 0, column = 0;
     this.redraw = () => this.draw(title, lines.slice(offset).map(line => [...line].slice(column).join('')), ' ↑↓/PgUp/PgDn scroll · ←→ horizontal · Esc back');
     try {

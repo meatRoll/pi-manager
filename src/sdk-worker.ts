@@ -3,19 +3,23 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import { join, relative, isAbsolute } from 'node:path';
 import { loadPiSdk } from './pi-sdk.js';
 import { isRemoteSource } from './package-state.js';
+import { errorCode, errorMessage } from './errors.js';
+import type { PiSettings } from './types.js';
 
 try {
   const { SettingsManager, DefaultPackageManager } = await loadPiSdk();
   const root = process.env.PI_CODING_AGENT_DIR;
-  const settings = JSON.parse(await readFile(join(root, 'settings.json'), 'utf8'));
+  if (!root) throw new Error('PI_CODING_AGENT_DIR is required');
+  const settings: PiSettings = JSON.parse(await readFile(join(root, 'settings.json'), 'utf8'));
   const settingsManager = SettingsManager.inMemory(settings, { projectTrusted: false });
   const manager = new DefaultPackageManager({ cwd: root, agentDir: root, settingsManager });
   const [operation, source] = process.argv.slice(2);
   if (operation) {
     manager.setProgressCallback(event => { if (event.message) console.error(event.message); });
-    if (operation === 'install') await manager.installAndPersist(source);
+    if (operation !== 'update' && !source) throw new Error('Package source is required');
+    if (operation === 'install') await manager.installAndPersist(source!);
     else if (operation === 'remove') {
-      if (!await manager.removeAndPersist(source)) throw new Error('No matching configured package');
+      if (!await manager.removeAndPersist(source!)) throw new Error('No matching configured package');
     } else if (operation === 'update') await manager.update(source === '--extensions' ? undefined : source);
     else throw new Error('Unknown package operation');
     if (!process.send) throw new Error('Package worker requires IPC');
@@ -23,7 +27,7 @@ try {
     await new Promise(() => {});
   }
   const validate = process.env.PI_MANAGER_VALIDATE_PACKAGES === '1';
-  const missing = [];
+  const missing: string[] = [];
   if (validate) {
     for (const pkg of manager.listConfiguredPackages()) {
       try {
@@ -35,7 +39,7 @@ try {
         }
         await stat(actual);
       } catch (error) {
-        if (error.code !== 'ENOENT' || process.env.PI_MANAGER_ALLOW_MISSING !== '1') throw error;
+        if (errorCode(error) !== 'ENOENT' || process.env.PI_MANAGER_ALLOW_MISSING !== '1') throw error;
         missing.push(pkg.source);
       }
     }
@@ -46,9 +50,9 @@ try {
     return 'skip';
   });
   const packages = await Promise.all(manager.listConfiguredPackages().map(async pkg => {
-    let manifest;
-    try { manifest = JSON.parse(await readFile(join(pkg.installedPath, 'package.json'), 'utf8')); } catch { /* local module or missing manifest */ }
+    let manifest: { name?: string; version?: string; description?: string } | undefined;
+    try { if (pkg.installedPath) manifest = JSON.parse(await readFile(join(pkg.installedPath, 'package.json'), 'utf8')); } catch { /* local module or missing manifest */ }
     return { ...pkg, name: manifest?.name, version: manifest?.version, description: manifest?.description };
   }));
   process.stdout.write(JSON.stringify({ paths, packages, missing }));
-} catch (error) { console.error(error.message); process.exitCode = 1; }
+} catch (error) { console.error(errorMessage(error)); process.exitCode = 1; }

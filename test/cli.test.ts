@@ -2,29 +2,35 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, mkdir, writeFile, readFile, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type { Resource } from '../src/types.js';
+import { VERSION } from '../src/version.js';
 import { spawnSync } from 'node:child_process';
 import { findPiSdk } from '../src/pi-sdk.js';
 import { clip, plain } from '../src/terminal.js';
 
 const temp = await realpath(await mkdtemp(join(tmpdir(), 'pi-manager-cli-')));
 const home = join(temp, 'manager');
-const cli = resolve('src/index.js');
+const cli = fileURLToPath(new URL('../src/index.js', import.meta.url));
 const env = { ...process.env, PI_MANAGER_HOME: home, PI_OFFLINE: '1' };
-let sdk;
+let sdk: string | undefined;
 try { sdk = findPiSdk(); } catch { /* optional Pi integration */ }
 after(() => rm(temp, { recursive: true, force: true }));
-function command(args) {
+function command(args: string[]) {
   return spawnSync(process.execPath, [cli, ...args], { env, encoding: 'utf8', timeout: 30000 });
 }
-function ok(args) {
+function ok(args: string[]) {
   const result = command(args);
   assert.equal(result.status, 0, result.stderr || result.stdout);
   return result.stdout;
 }
 
-test('help, error exit codes, explicit destructive consent', () => {
+test('help, error exit codes, explicit destructive consent', async () => {
+  const manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string };
+  assert.equal(VERSION, manifest.version);
   assert.match(ok(['--help']), /Space toggle/);
+  assert.equal(ok(['--version']).trim(), VERSION);
   assert.equal(command(['invalid']).status, 1);
   ok(['profile', 'create', 'review']);
   assert.equal(command(['package', 'add', 'review', 'npm:demo']).status, 1);
@@ -41,7 +47,7 @@ test('local package lifecycle and resource inventory through real Pi, offline', 
   await writeFile(join(source, 'skills/demo/SKILL.md'), '---\nname: demo\ndescription: A demo\n---\n# Demo');
   await writeFile(join(source, 'prompts/demo.md'), 'Demo prompt');
   ok(['package', 'add', 'review', source, '--yes']);
-  let list = JSON.parse(ok(['resource', 'list', 'review', '--json']));
+  let list: Resource[] = JSON.parse(ok(['resource', 'list', 'review', '--json']));
   assert.equal(list.filter(r => r.origin === 'package').length, 2);
   ok(['package', 'disable', 'review', source]);
   list = JSON.parse(ok(['resource', 'list', 'review', '--json']));

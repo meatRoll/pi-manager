@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { expectDefined } from './helpers.js';
 
 const temp = await realpath(await mkdtemp(join(tmpdir(), 'pi-manager-resources-')));
 process.env.PI_MANAGER_HOME = join(temp, 'manager');
@@ -15,7 +16,7 @@ try { sdk = findPiSdk(); } catch { /* integration tests report skip when Pi is a
 const integration = sdk ? {} : { skip: 'Installed Pi SDK required (or set PI_MANAGER_SDK_PATH)' };
 after(() => rm(temp, { recursive: true, force: true }));
 
-async function setup(name) {
+async function setup(name: string) {
   await core.createProfile(name);
   const source = join(temp, `source-${name}`);
   await mkdir(join(source, 'skills', 'demo'), { recursive: true });
@@ -39,7 +40,7 @@ test('SDK inventory finds manifest resources without executing extension code', 
   const current = await resources.inventory('inventory');
   assert.equal(current.packages[0].version, '1.0.0');
   assert.equal(current.resources.filter(r => r.origin === 'package').length, 4);
-  const skill = current.resources.find(r => r.type === 'skills');
+  const skill = expectDefined(current.resources.find(r => r.type === 'skills'));
   assert.equal(skill.packageRoot, source);
   assert.equal(skill.owned, false);
   assert.equal((await resources.previewResource('inventory', skill.id)).text.includes('# Demo'), true);
@@ -49,26 +50,29 @@ test('SDK inventory finds manifest resources without executing extension code', 
 test('per-resource toggles preserve sibling state and respect whole-package disable', integration, async () => {
   const source = await setup('toggles');
   let state = await resources.inventory('toggles');
-  const a = state.resources.find(r => r.name === 'a.md');
-  const b = state.resources.find(r => r.name === 'b.md');
+  const a = expectDefined(state.resources.find(r => r.name === 'a.md'));
+  const b = expectDefined(state.resources.find(r => r.name === 'b.md'));
   await resources.toggleResource('toggles', a.id, false);
   state = await resources.inventory('toggles');
-  assert.equal(state.resources.find(r => r.id === a.id).enabled, false);
-  assert.equal(state.resources.find(r => r.id === b.id).enabled, true);
+  assert.equal(expectDefined(state.resources.find(r => r.id === a.id)).enabled, false);
+  assert.equal(expectDefined(state.resources.find(r => r.id === b.id)).enabled, true);
   await togglePackage('toggles', source, false);
   state = await resources.inventory('toggles');
   assert.equal(state.resources.some(r => r.origin === 'package' && r.enabled), false);
   await togglePackage('toggles', source, true);
   state = await resources.inventory('toggles');
-  assert.equal(state.resources.find(r => r.id === a.id).enabled, false);
-  assert.equal(state.resources.find(r => r.id === b.id).enabled, true);
+  assert.equal(expectDefined(state.resources.find(r => r.id === a.id)).enabled, false);
+  assert.equal(expectDefined(state.resources.find(r => r.id === b.id)).enabled, true);
   const settings = await core.getSettings('toggles');
-  settings.packages[0].prompts = [];
+  const entry = expectDefined(settings.packages?.[0]);
+  assert.notEqual(typeof entry, 'string');
+  if (typeof entry === 'string') throw new Error('Expected resource filters');
+  entry.prompts = [];
   await core.saveSettings('toggles', settings);
   await resources.toggleResource('toggles', a.id, true);
   state = await resources.inventory('toggles');
-  assert.equal(state.resources.find(r => r.id === a.id).enabled, true);
-  assert.equal(state.resources.find(r => r.id === b.id).enabled, false);
+  assert.equal(expectDefined(state.resources.find(r => r.id === a.id)).enabled, true);
+  assert.equal(expectDefined(state.resources.find(r => r.id === b.id)).enabled, false);
 });
 
 test('copy imports skills and context; edit/delete never touch source files', integration, async () => {
@@ -79,10 +83,10 @@ test('copy imports skills and context; edit/delete never touch source files', in
   const owned = state.resources.find(r => r.owned && r.type === 'skills');
   assert.ok(owned);
   await resources.toggleResource('imports', owned.id, false);
-  assert.equal((await resources.inventory('imports')).resources.find(r => r.id === owned.id).enabled, false);
+  assert.equal(expectDefined((await resources.inventory('imports')).resources.find(r => r.id === owned.id)).enabled, false);
   await resources.writeResource('imports', owned.id, '---\nname: demo\ndescription: Edited\n---\n# Edited');
   assert.equal((await readFile(join(source, 'skills/demo/SKILL.md'), 'utf8')).includes('# Demo'), true);
-  const context = state.resources.find(r => r.type === 'context');
+  const context = expectDefined(state.resources.find(r => r.type === 'context'));
   await resources.toggleResource('imports', context.id, false);
   assert.equal((await core.getMetadata('imports')).contexts[0].enabled, false);
   await resources.removeResource('imports', owned.id);
@@ -94,7 +98,7 @@ test('symlink imports rejected without partially adopting resources', integratio
   const source = await setup('links');
   await symlink(join(source, 'extensions/demo.js'), join(source, 'skills/demo/unsafe.js'));
   await assert.rejects(resources.importResource('links', 'skills', join(source, 'skills/demo'), 'unsafe'), /Symlink/);
-  assert.equal((await core.getSettings('links')).skills.length, 0);
+  assert.equal((await core.getSettings('links')).skills?.length, 0);
 });
 
 test('profile copy leaves credentials, sessions and installation files behind', integration, async () => {
@@ -103,7 +107,8 @@ test('profile copy leaves credentials, sessions and installation files behind', 
   await writeFile(join(core.profilePath('original'), 'auth.json'), '{"secret":"do not copy"}');
   await core.copyProfile('original', 'copy');
   const copied = await resources.inventory('copy');
-  assert.equal(copied.resources.find(r => r.type === 'context').name, 'rules');
-  assert.equal((await resources.previewResource('copy', copied.resources.find(r => r.type === 'context').id)).text, 'Copy these instructions');
+  const context = expectDefined(copied.resources.find(r => r.type === 'context'));
+  assert.equal(context.name, 'rules');
+  assert.equal((await resources.previewResource('copy', context.id)).text, 'Copy these instructions');
   await assert.rejects(readFile(join(core.profilePath('copy'), 'auth.json')), /ENOENT/);
 });

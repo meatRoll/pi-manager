@@ -2,14 +2,16 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
-  MANAGER_HOME, createProfile, copyProfile, deleteProfile, listProfiles, setDefaultProfile, profilePath, runPi, assertProfile,
+  MANAGER_HOME, createProfile, copyProfile, deleteProfile, listProfiles, setDefaultProfile, runPi, assertProfile,
 } from './core.js';
 import { packageOperation, inspectPackage, togglePackage, packageVersions, rollbackPackages } from './packages.js';
-import { inventory, previewResource, toggleResource, importResource, createContext, removeResource } from './resources.js';
+import { inventory, previewResource, toggleResource, importResource, createContext, removeResource, parseResourceType } from './resources.js';
 import { openTui, editResource } from './tui.js';
 import { plain } from './terminal.js';
+import { errorCode, errorMessage } from './errors.js';
+import { VERSION } from './version.js';
 
-const HELP = `pi-manager 0.3.0 — isolated Pi resource manager
+const HELP = `pi-manager ${VERSION} — isolated Pi resource manager
 
   pi-manager                                     Open TUI (↑↓, / search, Space toggle)
   pi-manager profile list
@@ -47,29 +49,29 @@ Environment: PI_MANAGER_HOME, PI_MANAGER_PI, PI_MANAGER_SDK_PATH, PI_MANAGER_EDI
 Changes apply next launch. No live unload or mutation of the default Pi/project config.
 --yes acknowledges package code/install-script execution or destructive deletion.
 `;
-const requireValue = (value, label) => { if (!value) throw new Error(`${label} is required. See --help.`); return value; };
-const acknowledge = args => { if (!args.includes('--yes')) throw new Error('Explicit --yes required. Review third-party code and scripts, or the data being deleted.'); };
-const print = text => console.log(plain(text));
+const requireValue = (value: string | undefined, label: string): string => { if (!value) throw new Error(`${label} is required. See --help.`); return value; };
+const acknowledge = (args: string[]) => { if (!args.includes('--yes')) throw new Error('Explicit --yes required. Review third-party code and scripts, or the data being deleted.'); };
+const print = (text: unknown) => console.log(plain(text));
 
-async function contextId(profile, name) {
+async function contextId(profile: string, name: string) {
   const item = (await inventory(profile)).resources.find(resource => resource.type === 'context' && (resource.name === name || resource.id === name));
   if (!item) throw new Error(`Context not found: ${name}`);
   return item.id;
 }
 
-export async function main(args) {
+export async function main(args: string[]) {
   const [command, subcommand, ...raw] = args;
   if (!command || command === 'tui') return openTui();
   if (['help', '--help', '-h'].includes(command)) return print(HELP);
-  if (['--version', '-v'].includes(command)) return print('0.3.0');
+  if (['--version', '-v'].includes(command)) return print(VERSION);
   const rest = raw.filter(value => value !== '--yes' && value !== '--json');
-  const [profile, value, extra, label] = rest;
+  const [profileInput, value, extra, label] = rest;
   if (command === 'profile') {
     if (subcommand === 'list') {
       for (const item of await listProfiles()) print(`${item.isDefault ? '*' : ' '} ${item.name}\t${item.path}`);
       return;
     }
-    requireValue(profile, 'Profile');
+    const profile = requireValue(profileInput, 'Profile');
     if (subcommand === 'create') return print(await createProfile(profile));
     if (subcommand === 'copy') return print(await copyProfile(profile, requireValue(value, 'Destination')));
     if (subcommand === 'use') { await setDefaultProfile(profile); return print(`Default: ${profile}`); }
@@ -83,8 +85,8 @@ export async function main(args) {
     }
   }
   if (command === 'package') {
-    if (subcommand === 'inspect') return print(JSON.stringify(await inspectPackage(requireValue(profile, 'Source')), null, 2));
-    requireValue(profile, 'Profile'); await assertProfile(profile);
+    if (subcommand === 'inspect') return print(JSON.stringify(await inspectPackage(requireValue(profileInput, 'Source')), null, 2));
+    const profile = requireValue(profileInput, 'Profile'); await assertProfile(profile);
     if (subcommand === 'versions') return print(JSON.stringify(await packageVersions(profile), null, 2));
     if (subcommand === 'rollback') {
       acknowledge(raw);
@@ -108,7 +110,7 @@ export async function main(args) {
   }
   if (command === 'resource' || command === 'context') {
     const context = command === 'context';
-    requireValue(profile, 'Profile'); await assertProfile(profile);
+    const profile = requireValue(profileInput, 'Profile'); await assertProfile(profile);
     if (subcommand === 'list') {
       const current = await inventory(profile);
       const filtered = current.resources.filter(resource => !(context || value) || resource.type === (context ? 'context' : value));
@@ -116,7 +118,7 @@ export async function main(args) {
       for (const resource of filtered) print(`${resource.id} [${resource.enabled ? 'x' : ' '}] ${resource.type}\t${resource.name}\t${resource.owned ? 'owned' : resource.origin}\t${resource.path}`);
       return;
     }
-    if (subcommand === 'import') return print(await importResource(profile, context ? 'context' : requireValue(value, 'Type'), requireValue(context ? value : extra, 'Path'), context ? extra : label));
+    if (subcommand === 'import') return print(await importResource(profile, context ? 'context' : parseResourceType(requireValue(value, 'Type')), requireValue(context ? value : extra, 'Path'), context ? extra : label));
     if (context && subcommand === 'create') return print(await createContext(profile, requireValue(value, 'Name'), extra || ''));
     const id = context ? await contextId(profile, requireValue(value, 'Context name')) : requireValue(value, 'Resource id');
     if (subcommand === 'preview') {
@@ -133,17 +135,17 @@ export async function main(args) {
   }
   if (command === 'logs') {
     const root = await assertProfile(requireValue(subcommand, 'Profile'));
-    if (profile) {
-      if (!/^[A-Za-z0-9.-]+\.log$/.test(profile)) throw new Error('Invalid log filename');
-      return print(await readFile(join(root, '.operations', profile), 'utf8'));
+    if (profileInput) {
+      if (!/^[A-Za-z0-9.-]+\.log$/.test(profileInput)) throw new Error('Invalid log filename');
+      return print(await readFile(join(root, '.operations', profileInput), 'utf8'));
     }
     try { return print((await readdir(join(root, '.operations'))).sort().reverse().join('\n')); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; return; }
+    catch (error) { if (errorCode(error) !== 'ENOENT') throw error; return; }
   }
   throw new Error('Invalid command. See pi-manager --help.');
 }
 
 main(process.argv.slice(2)).catch(error => {
-  console.error(`pi-manager: ${plain(error.message)}`);
+  console.error(`pi-manager: ${plain(errorMessage(error))}`);
   process.exitCode = 1;
 });
