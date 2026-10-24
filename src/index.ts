@@ -10,10 +10,14 @@ import { openTui, editResource } from './tui.js';
 import { plain } from './terminal.js';
 import { errorCode, errorMessage } from './errors.js';
 import { VERSION } from './version.js';
+import { installPiExtension } from './install-pi.js';
 
-const HELP = `pi-manager ${VERSION} — isolated Pi resource manager
+const HELP = `pi-manager ${VERSION} — Pi resource manager extension
 
-  pi-manager                                     Open TUI (↑↓, / search, Space toggle)
+Primary interface: type /manager INSIDE Pi. This CLI is optional/legacy.
+  pi-manager install --yes                       Register extension bundle, then restart Pi
+
+  pi-manager tui                                 Legacy standalone maintenance UI
   pi-manager profile list
   pi-manager profile create <name>
   pi-manager profile copy <from> <to>             Excludes auth, sessions, installed packages
@@ -61,9 +65,11 @@ async function contextId(profile: string, name: string) {
 
 export async function main(args: string[]) {
   const [command, subcommand, ...raw] = args;
-  if (!command || command === 'tui') return openTui();
+  if (!command) return print(HELP);
+  if (command === 'tui') return openTui();
   if (['help', '--help', '-h'].includes(command)) return print(HELP);
   if (['--version', '-v'].includes(command)) return print(VERSION);
+  if (command === 'install') { acknowledge(args); return installPiExtension(true); }
   const rest = raw.filter(value => value !== '--yes' && value !== '--json');
   const [profileInput, value, extra, label] = rest;
   if (command === 'profile') {

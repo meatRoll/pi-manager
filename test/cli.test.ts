@@ -29,7 +29,9 @@ function ok(args: string[]) {
 test('help, error exit codes, explicit destructive consent', async () => {
   const manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string };
   assert.equal(VERSION, manifest.version);
-  assert.match(ok(['--help']), /Space toggle/);
+  assert.match(ok(['--help']), /INSIDE Pi/);
+  assert.match(ok([]), /Primary interface/);
+  assert.equal(command(['install']).status, 1);
   assert.equal(ok(['--version']).trim(), VERSION);
   assert.equal(command(['invalid']).status, 1);
   ok(['profile', 'create', 'review']);

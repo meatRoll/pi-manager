@@ -2,263 +2,222 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-An independent **TUI manager and launcher for Pi profiles, packages, and context resources**. Manage skills, extensions, prompt templates, themes, and Markdown context without patching Pi or registering an extension in your default Pi setup.
+A **Pi extension** for managing packages, skills, extensions, prompt templates, themes, and preset Markdown context **inside Pi**.
 
-Written in **TypeScript** with strict type checking. The compiled CLI has no third-party runtime dependencies.
+```text
+Start Pi → /manager → manage resources → return to the same conversation
+```
 
-## Quick start
+No separate manager process or nested Pi session is required. Written in **TypeScript** with strict type checking; uses Pi's public extension/SDK APIs only. No Pi source patches, module-cache tricks, or hot unloading.
 
-Requires **Node.js 22.19+** and an installed Pi with its public SDK. Currently tested with **Pi 1.3.0**.
+## Install
+
+Requires **Node.js 22.19+** and Pi. Tested with **Pi 1.3.0**.
 
 ```bash
 git clone https://github.com/meatRoll/pi-manager.git
 cd pi-manager
 npm ci
-npm start
-# Or build once and run the compiled CLI directly:
-npm run build
-node dist/index.js
+npm run install:pi -- --yes
 ```
 
-Choose **+ Create profile**, give it a name such as `review`, add packages or resources, then select **Run Pi**.
+The installer builds the project, creates a manager-owned local Pi package under `~/.pi-manager/pi-package`, then registers it with the official `pi install <path>` command. **This deliberately adds one package declaration to your Pi agent settings.** It does not copy or replace existing packages, credentials, sessions, models, or project files.
 
-The repository is public. `package.json` intentionally keeps `private: true` to prevent accidental npm publication: the npm name is already taken by another project. **Do not install with `npm install -g pi-manager`.**
-
-### Install the global command
-
-After installing development dependencies with `npm ci`, pack this project and install the local archive. `npm pack` automatically builds the TypeScript sources first; packing and local installation can run offline.
-
-```bash
-npm pack --offline
-npm install --global ./pi-manager-0.4.0.tgz --offline --ignore-scripts --no-audit --no-fund
-pi-manager --version
-```
-
-Then launch it from the project you want Pi to work on:
+Restart Pi in your working project:
 
 ```bash
 cd /path/to/your-project
-pi-manager
-# Or launch a particular profile directly:
-pi-manager profile run review
+pi
 ```
 
-Pi inherits your current working directory. This installation is a standalone copy of the packed version; rebuild, repack, and reinstall after source changes. For development, you can instead run `npm run build` followed by `npm link --offline`; rebuild after changing `.ts` files.
-
-The CLI examples below use the installed `pi-manager` command. From a source checkout, substitute `node dist/index.js` after building.
-
-### TUI controls
-
-- `↑` / `↓`, `PgUp` / `PgDn`: navigate.
-- `Enter`: open details or perform an action.
-- `/`: search; press `Enter` to finish typing, then again to open a result.
-- `Space`: toggle a package or resource.
-- `Esc`: go back; clear an active search first.
-- Preview pages support vertical and horizontal scrolling.
+Then type **inside Pi**:
 
 ```text
-Profiles
-└── review
-    ├── Run Pi
-    ├── Packages
-    │   └── package details / resource switches / uninstall
-    ├── Skills
-    ├── Context files
-    ├── Extensions
-    ├── Prompt templates
-    ├── Themes
-    ├── All resources
-    ├── Package generations / restore
-    ├── Package operation logs
-    ├── Set as default
-    ├── Copy profile
-    └── Delete profile
+/manager
 ```
 
-Package installation shows available metadata and asks you to acknowledge third-party code risks. Uninstalling and deleting resources also require confirmation. The TUI runs independently, not inside Pi.
+`npm start` simply starts normal `pi` after installation. Keep the checkout in place because the registered package points to its compiled implementation. After moving it or updating the code, run `npm ci` and `npm run install:pi -- --yes` again, then restart Pi.
 
-## Isolation boundaries
+The GitHub repository is public. `package.json` remains `private: true` to prevent accidental npm publication: the npm name belongs to another project. **Do not use `npm install -g pi-manager` or `pi install npm:pi-manager`.** Installing the raw Git URL is not the supported setup path because generated `dist/` files are not committed; use the checkout/build/install commands above.
 
-The manager stores its own persistent state under `~/.pi-manager/`:
+### Try without permanent registration
+
+```bash
+npm ci
+npm run build
+pi -e ./dist/extension.js
+```
+
+This provides `/manager` for one invocation only. You can edit staging profiles and publish a snapshot, but ordinary Pi starts will not load that snapshot until you run the installer. Do not load the direct extension and the registered bundle together: they both register `/manager`.
+
+## Use inside Pi
+
+Open `/manager`, select **+ Create profile**, then enter a name such as `review`.
+
+Here a profile is a **staging resource preset**, not a way to switch the running Pi's credentials, sessions, or agent directory.
+
+```text
+/manager
+├── review                         Staging resource preset
+│   ├── Use on next Pi start       Publish a detached snapshot
+│   ├── Packages                   Add / update / enable / disable / remove
+│   ├── Skills
+│   ├── Context files              Create / import / edit inside Pi
+│   ├── Extensions
+│   ├── Prompt templates
+│   ├── Themes
+│   ├── All resources              Preview / toggle / edit owned copies
+│   ├── Package generations / restore
+│   ├── Package operation logs
+│   ├── Copy profile
+│   └── Delete staging profile
+├── + Create profile
+├── Use manager only on next Pi start
+└── About / loading instructions
+```
+
+- Use Pi-native lists, input dialogs, and the multi-line editor. `Enter` opens an item; `/` searches (press Enter to finish searching, then again to open). `Esc` returns or clears search first. Preview screens support `↑↓` and `PgUp` / `PgDn`.
+- Package detail and resource menus contain explicit **Enable / Disable** actions. The standalone UI's Space-toggle behavior is not required here.
+- Skill imports select a directory containing `SKILL.md`. Resource imports copy files, so editing a manager-owned copy does not edit the original.
+- Package sources accept `npm:name@version`, `git:github.com/owner/repo@ref`, and local paths. Local packages remain external references: no dependency installation, copying, or deletion of their original directories.
+- Package operations and deletion ask for confirmation. Installation scripts have your user permissions.
+
+### Save, publish, restart
+
+1. Edit packages, resource switches, and context in a staging profile.
+2. Select **Use on next Pi start (publish snapshot)**.
+3. Exit Pi normally and start it again. The registered local package supplies the selected extensions, skills, templates, themes, and context at startup.
+4. Open `/manager` again. Its header distinguishes the **loaded** preset from the selection published for the **next start**.
+
+Publishing copies owned package/resource bytes into a detached snapshot. Editing or deleting the staging profile does not remove files used by the live session. External local packages remain references, so their own edits are not isolated. Snapshots currently have no automatic garbage collection.
+
+A selected preset **adds managed resources to your normal Pi environment**. It does not suppress existing personal/project/shared resources, change project trust, or switch credentials/model configuration/session storage. Names can conflict with existing resources; normal Pi collision rules apply. Choose **Use manager only on next Pi start** to stop exporting preset resources on the next launch.
+
+The extension does not call `/reload`, manipulate active runtime registries, or promise immediate unloading. Use a full restart after publishing, particularly for extension changes. Running `/reload` yourself uses Pi's native behavior and is not a transactional rollback.
+
+## Context
+
+Create or import Markdown under **Context files**. The native Pi editor edits the manager-owned copy.
+
+On publication, enabled context contents are bound to the same startup snapshot as the resource paths. The extension adds them through a dedicated public `before_agent_start` prompt section. It does not overwrite `AGENTS.md`, `CLAUDE.md`, `SYSTEM.md`, other extensions' sections, or Pi's whole prompt.
+
+Staging edits do not silently change an already loaded snapshot's instructions. Publish and restart to use them. Disabling context cannot remove historical messages already saved in a conversation.
+
+## Package recovery
+
+Package mutations use Pi's public `DefaultPackageManager` in a separate Node worker. The worker handles package files only; it is **not another Pi conversation or terminal UI**.
+
+1. Acquire the staging profile's exclusive lease.
+2. Copy owned npm/Git files into a candidate generation; never hardlink active files.
+3. Install/update/remove within that candidate.
+4. Validate package files, manifests, ownership, and resource paths without executing extensions.
+5. Record digests and atomically replace one staging `settings.json` to select package paths and filters together. Keep the previous generation.
+
+A failure before commit leaves active staging references and owned package bytes unchanged. **Package generations / restore** validates the previous digest offline and switches packages and filters back. Publish afterward and restart Pi to use the restored version.
+
+Restore does not overwrite contexts, standalone resources, credentials, model files, sessions, or default/project configuration. External local packages restore **references only**, never historical source contents. Changed or missing owned snapshot files cause restore to fail rather than silently downloading another version.
+
+Whole-package disable sets all four resource filters to `[]` and preserves the prior entry; enable restores its exact filters. `autoload: false` is not treated as a whole-package switch because Pi gives it different incremental-filter semantics. Updating all packages never updates Pi itself.
+
+### Limits
+
+- This is not an OS sandbox or host-wide transaction. Third-party extensions and scripts have your permissions; their external writes, network requests, database changes, and Pi memory state cannot be undone.
+- Validation discovers resource files; it does not guarantee that third-party code or skill/theme content will load successfully at runtime.
+- Internal dependency symlinks are relocated into copies; external symlinks, special files, and linked Git worktrees are refused in owned snapshots. Imported resources reject symlinks.
+- An incomplete legacy baseline can initialize but is not advertised as restorable. Missing package declarations cannot be published as a misleading empty preset.
+- Current/previous generation switching is supported, not arbitrary history selection. Generations and published snapshots are retained and use extra disk space.
+- Forced termination can leave `.lock` or candidate directories. Confirm all related Pi/npm/Git processes have stopped before manual cleanup. Unknown locks are never automatically stolen.
+- Atomic file replacement is a publication boundary, not a whole-disk power-failure durability guarantee.
+
+## Storage and write boundaries
 
 ```text
 ~/.pi-manager/
 ├── state.json
-└── profiles/
-    └── review/
-        ├── settings.json       # Native Pi settings for this profile
-        ├── manager.json        # Context and manager metadata
-        ├── resources/          # Imported resource copies
-        ├── .packages/          # Owned generations; do not overwrite active files
-        │   └── <generation>/
-        │       ├── npm/        # Packages, manifests, and lockfiles for this generation
-        │       ├── git/        # Owned Git package copies
-        │       ├── settings.json
-        │       └── generation.json
-        ├── npm/                # Legacy layout may remain; copied, not moved/deleted
-        ├── git/                # Legacy layout may remain
-        ├── sessions/           # Profile-specific sessions
-        ├── auth.json           # Created by Pi when you log into this profile
-        └── .operations/        # Package operation logs
+├── profiles/<name>/
+│   ├── settings.json              Staging Pi package declarations and filters
+│   ├── manager.json               Context/resource metadata
+│   ├── resources/                 Imported, editable resource copies
+│   ├── .packages/<generation>/    Owned package bytes, lockfiles, and digests
+│   └── .operations/               Package logs
+└── pi-package/
+    ├── package.json               Atomic commit point; registered once in Pi
+    └── .snapshots/<id>/           Detached package/resource files and context
 ```
 
-The manager **does not intentionally modify**:
+**Installation is the explicit exception to “do not change default Pi settings”:** the official `pi install` adds the local manager package declaration. After registration, manager actions write to their own data directory, not repeatedly to default Pi settings.
 
-- Your default `~/.pi/agent/settings.json` or its resource directories.
-- The Pi installation, source code, or built-in extensions.
-- Your project's `.pi/`, `AGENTS.md`, or `CLAUDE.md`.
-- Environment variables in your parent shell.
-- The original files of imported resources or external local packages.
+The extension does not import existing default Pi resources into managed profiles, edit external originals, rewrite project `.pi` files, copy credentials, change the parent shell environment, or modify Pi's source/install directory. npm/Git caches and third-party scripts can still have external side effects.
 
-Package operations use Pi's public **`DefaultPackageManager` SDK** in a separate process, operating on a new candidate generation. After validation, one atomic replacement of the profile's `settings.json` switches package paths and filters together. Pi sees ordinary local package paths; it needs no patch or companion extension. Original npm/Git declarations and generation references live in the manager's settings field, while the UI continues to show the original sources. The manager never invokes Pi's self-update entry point.
+The current Pi continues to use its normal authentication and sessions. Old CLI-created isolated profile credentials/sessions are not adopted or shared by the in-Pi extension. Profile mutation locks still apply when a legacy manager-launched Pi uses that staging directory; externally launched processes cannot be detected reliably.
 
-Resource discovery also uses the public SDK for manifests, globs, and Pi resource filters. It does not import or execute extension code.
+## Update and uninstall
 
-### Not a security sandbox
-
-Configuration isolation is a write convention, **not an OS-level permission boundary**:
-
-- Package installation scripts, loaded extensions, and external editors run with your user permissions.
-- npm and Git may use their own caches, credentials, and configuration. They may write outside the manager directory.
-- Editing uses a temporary file; saving writes back only to the manager-owned resource copy.
-- Default Pi credentials, model configuration, and sessions are not shared automatically. Log into each profile or provide credentials through environment variables.
-- Pi may still discover native context such as project `AGENTS.md` / `CLAUDE.md` and shared skills such as `~/.agents/skills`. The default `--no-approve` disables trust-controlled project configuration, not every context discovery mechanism.
-- The UI shows the **next-launch configuration**, not the live state of an already running Pi process.
-
-## Package management
+After updating the checkout:
 
 ```bash
-pi-manager profile create review
-pi-manager package inspect npm:pi-tool-display
-pi-manager package add review npm:pi-tool-display --yes
-pi-manager package list review
-pi-manager package disable review npm:pi-tool-display
-pi-manager package enable review npm:pi-tool-display
-pi-manager package update review --yes
-pi-manager package remove review npm:pi-tool-display --yes
-pi-manager package versions review
-pi-manager package rollback review --yes
+npm ci
+npm run install:pi -- --yes
+# Restart Pi
 ```
 
-Sources use Pi's formats: `npm:name@version`, `git:github.com/owner/repo@ref`, or an absolute path to a local directory/module. **A local package is a reference:** its files are not copied, its dependencies are not installed, and its original directory is never deleted. Import a resource copy when you want to edit it independently.
-
-Disabling a whole package sets all four resource filters to `[]` and preserves the previous entry in manager metadata (`manager.json` for legacy profiles, `piManagerPackages` in `settings.json` for generation-managed profiles). Enabling restores those exact filters. **`autoload: false` is not used as a whole-package switch**, because Pi gives it separate incremental-filter semantics.
-
-Updating without a source explicitly updates all packages, not Pi itself. CLI package operations require `--yes` to acknowledge third-party code and installation-script risks. Git inspection reports its source only; it cannot verify a manifest or scripts before downloading the repository.
-
-### Stopped-profile generation switching and restore
-
-1. Acquire an exclusive profile lease. Refuse package changes and restore while a manager-launched Pi still uses that profile.
-2. Copy owned npm/Git files into a new candidate generation. Copy real bytes, not hardlinks to active files. Relocate internal dependency symlinks; reject external symlinks and linked Git worktrees.
-3. Install, update, or remove packages inside the candidate. Validate package files, manifests, resource paths, and ownership without loading extensions. Validation is not a guarantee that third-party code runs correctly.
-4. Record content digests, selections, and the previous generation reference. Publish the new paths and filters with one atomic settings replacement. The next Pi launch uses them.
-5. Discard the candidate on failure, leaving active package files and references unchanged. Retain the previous generation after success.
-
-Use `package rollback <profile> --yes` or **Package generations / restore** in the TUI:
-
-- Validate the previous generation's digest, paths, and package files offline, then restore its package paths, package selections, and resource filters.
-- Do not restore `auth.json`, sessions, models, context files, or standalone resources. Do not change default Pi or project configuration.
-- External local packages restore **references only**, not historical file contents. Changes to their original directories cannot be undone by this feature.
-- Refuse restore if owned package files changed or disappeared. Never silently download a different version. Generation metadata and lockfiles remain with their generation.
-- Restore again to switch back to the generation you just left. The UI supports current/previous switching, not arbitrary historical selection.
-
-The first successful operation on a legacy profile copies an available baseline and leaves its original package directories in place. A copied profile that has declarations but no installed packages can initialize, but it is not advertised as having a complete restorable baseline; missing packages are reported.
-
-**Limits:** this is not a host-wide transaction. External script writes, network requests, database changes, and Pi's in-memory state cannot be undone. Third-party code can still write outside its candidate directory; preventing that requires an OS sandbox.
-
-After switching, native Pi `packages` entries are local generation paths. Use pi-manager for package updates, removal, and restore instead of changing these managed declarations with native Pi package commands. Updating a local path in Pi is not equivalent to updating the original npm/Git source.
-
-Generations are **not automatically garbage-collected** and consume additional disk space. Forced termination can leave candidate directories and a `.lock`. Confirm that all related Pi/npm/Git processes have stopped before manually cleaning them up. Atomic settings replacement is a publication boundary for ordinary operations, not a guarantee of whole-disk transaction durability during power loss.
-
-## Resource management
+Remove the registered package using Pi's official command (substitute the path if `PI_MANAGER_HOME` differs):
 
 ```bash
-pi-manager resource list review
-pi-manager resource list review skills --json
-pi-manager resource import review skills ./my-skill
-pi-manager resource import review prompts ./review.md
-pi-manager resource preview review <resource-id>
-pi-manager resource disable review <resource-id>
-pi-manager resource enable review <resource-id>
-pi-manager resource edit review <resource-id>
-pi-manager resource remove review <resource-id> --yes
+pi remove "$HOME/.pi-manager/pi-package"
 ```
 
-Types: `skills`, `extensions`, `prompts`, `themes`, and `context`.
+Restart Pi. This removes the declaration, not your managed data or source checkout. Review backups and stop relevant processes before manually deleting retained data.
 
-- Preview and toggle individual package resources without modifying package files.
-- External/package resources are read-only: import a copy before editing or deleting an individual resource.
-- Imports copy files. A skill must be a directory containing `SKILL.md`; an extension directory must contain `index.ts` or `index.js`.
-- Imports reject symlinks to avoid accidentally editing or deleting original files through them.
-- Native skill frontmatter, themes, and other formats must still satisfy Pi's requirements. Discovery does not imply successful runtime loading.
-- Whole-package disable takes precedence over per-resource selections.
-- Previews are limited to 128 KiB. The editing flow refuses to overwrite files exceeding that limit.
+## Optional maintenance CLI
 
-## Preset context
+The command-line interface remains for automation and legacy isolated-profile users. It is **not the primary interface** and is not needed to open `/manager`.
 
 ```bash
-pi-manager context create review rules 'Focus on correctness and explain assumptions.'
-pi-manager context import review ./guidelines.md
-pi-manager context list review
-pi-manager context edit review rules
-pi-manager context preview review rules
-pi-manager context disable review rules
-pi-manager context enable review rules
-pi-manager context remove review rules --yes
+node dist/index.js --help
+node dist/index.js package versions review
+node dist/index.js package rollback review --yes
 ```
 
-Context lives in the profile's `resources/context/*.md`. Enabled files are passed to a new Pi process with **`--append-system-prompt <file>`**, without writing or replacing `AGENTS.md` or `SYSTEM.md`. Disabling affects future launches, not historical messages already saved in a session.
+The old standalone UI is explicitly `node dist/index.js tui`. Running the CLI without arguments prints help rather than launching a separate TUI. Legacy `profile run` still launches an isolated Pi child; the `/manager` extension never uses it. CLI changes also need publication from `/manager` before they affect the registered preset.
 
-## Copying and launching profiles
+If you previously installed a global `pi-manager` command, it is optional. To update that maintenance command after building:
 
 ```bash
-pi-manager profile copy review frontend
-pi-manager profile use frontend
-pi-manager profile run frontend
-pi-manager profile run frontend -- --offline
-pi-manager profile delete frontend --yes
+npm pack --offline
+npm install --global ./pi-manager-0.5.0.tgz --offline --ignore-scripts --no-audit --no-fund
+pi-manager install --yes
 ```
 
-Copies include settings, manager metadata, imported resources, and context. **Credentials, sessions, installed npm/Git files, and generation references are excluded.** Original npm/Git declarations remain and need installation/resolution in the new profile; the copy does not share writable generation directories. External local sources continue to reference the same external files.
-
-Launching sets child-only `PI_CODING_AGENT_DIR=<profile>` and a separate `PI_CODING_AGENT_SESSION_DIR`. It defaults to `--no-approve`; explicitly forward `--approve` if you need trust-controlled project resources. The manager never changes an existing Pi process's agent directory and does not implement hot unloading.
-
-Manager-launched Pi and mutations share the same profile lease. External manually launched Pi processes cannot be detected. A crash can leave `.lock`: **verify that related Pi/npm/Git processes have exited before removing it manually**. The manager does not automatically take over unknown locks.
-
-## Environment variables
+## Environment
 
 | Variable | Purpose |
 |---|---|
-| `PI_MANAGER_HOME` | State directory; defaults to `~/.pi-manager`, must not overlap the default Pi directory |
-| `PI_MANAGER_PI` | Pi executable; defaults to `pi` |
-| `PI_MANAGER_SDK_PATH` | Installed public Pi SDK package directory or entry file; otherwise discovered from Node modules or the installed Pi launcher |
-| `PI_MANAGER_EDITOR` | Editor **executable path**; falls back to `VISUAL`, `EDITOR`, then `vi` |
+| `PI_MANAGER_HOME` | Manager data; default `~/.pi-manager`, must not overlap default Pi. Use the same value during install and Pi startup. |
+| `PI_MANAGER_PI` | Pi executable used by installer/legacy CLI; default `pi`. |
+| `PI_MANAGER_SDK_PATH` | Public installed Pi SDK package/entry for worker operations; otherwise detected automatically. |
+| `PI_MANAGER_EDITOR` | External editor for the legacy CLI only. In-Pi editing uses Pi's editor. |
 
-Editor strings are not evaluated by a shell. Use an executable wrapper if your editor needs arguments. Network proxies are inherited from the process environment; the manager does not rewrite Pi's `httpProxy` or npm registry settings.
+Network proxies are inherited; the manager does not rewrite npm registry or Pi proxy settings. The command requires an idle session and interactive Pi UI; an RPC client supporting native dialogs also works. Print/JSON mode does not open the manager. Opening or closing it makes no model call.
 
 ## Development and tests
 
 ```bash
-npm ci                # TypeScript and Node types: development dependencies only
-npm run typecheck     # Strict checks for source and tests; no emitted files
-npm run build         # src/*.ts → dist/*.js
-npm test              # Compile into .test-dist/, then run node:test
+npm ci
+npm run typecheck
+npm run build
+npm test
 ```
 
-`src/` and `test/` contain TypeScript. ESM imports use `.js` extensions, resolved to `.ts` by TypeScript's NodeNext mode. `dist/`, `.test-dist/`, and `node_modules/` are not committed. Distribution archives contain compiled files and documentation; end users do not need TypeScript to run the CLI.
+`src/` and `test/` are TypeScript. NodeNext imports use `.js` extensions resolved to `.ts` sources. `dist/`, `.test-dist/`, and `node_modules/` are not committed.
 
-Tests use temporary manager directories and cover path protection, package/resource filters, CLI behavior, profile copying, context, failure recovery, pre-commit fault injection, and package content digests. Real Pi SDK integration tests run offline. An in-process loopback registry also exercises real npm installation, version replacement, removal, and restore after the registry shuts down, without external network access. SDK-dependent integration tests are skipped if Pi is absent; set `PI_MANAGER_SDK_PATH` if needed. No model API key or model call is required.
+Pi supplies `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui` at runtime. They are optional peers and development-only dependencies, **not bundled runtime copies**. Distribution archives include compiled files and both READMEs.
 
-## Not implemented
+Tests cover command registration, non-UI/busy/reentrant guards, native dialog/editor flows, snapshot context binding, detached publication, failed publications, package digests/recovery, symlink protection, and resource filters. Real Pi integration installs into a temporary agent directory and checks that `/manager`, exported extensions, prompts, and skills load and the command returns to the same session without a model call. npm lifecycle tests use an in-process loopback registry. No model API key is needed.
 
-- Marketplace indexing or remote search.
-- Comprehensive installation-script approval or sandboxing.
-- Reliable cancellation of installations and recovery of entire child-process trees.
-- Rollback of external side effects or host-wide transactions.
-- Arbitrary historical generation selection or automatic generation cleanup.
-- Live profile switching; **hot unloading is explicitly out of scope**.
-- Shared global sessions/credentials or automatic exports into default Pi configuration.
-- Exact effective-context token counts for individual package resources.
+## Out of scope
+
+Hot unloading, runtime monkey patches, live credential/agent-directory switching, marketplace indexing, OS sandboxing, rollback of external side effects, arbitrary history selection, automatic snapshot cleanup, reliable cancellation of entire installer process trees, and exact per-resource token counts.
 
 ## License
 

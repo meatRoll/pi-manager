@@ -2,257 +2,222 @@
 
 [English](README.md) | **简体中文**
 
-独立的 **Pi profile、插件包和上下文资源 TUI 管理器**，不改 Pi 源码，不往默认 Pi 配置里注册插件。
+一个**在 Pi 里面使用的扩展**，管理插件包、Skills、Extensions、提示词模板、主题和预置 Markdown 上下文。
 
-## 开始使用
+```text
+启动 Pi → 输入 /manager → 管理资源 → 返回当前对话
+```
 
-需要 Node.js **22.19+**，以及安装了 SDK 的 Pi。当前在 Pi **1.3.0** 上验证。
+**不需要另开独立管理器，不在 Pi 内嵌套启动第二个 Pi。** 使用 TypeScript 严格类型检查，只使用 Pi 公共扩展/SDK 接口，不修改 Pi 源码、模块缓存或内部注册表，不做热卸载。
+
+## 安装
+
+需要 **Node.js 22.19+** 和已安装的 Pi；当前在 **Pi 1.3.0** 验证。
 
 ```bash
 git clone https://github.com/meatRoll/pi-manager.git
 cd pi-manager
 npm ci
-npm start
-# 或只构建一次后直接运行
-npm run build
-node dist/index.js
+npm run install:pi -- --yes
 ```
 
-源码和测试使用 **TypeScript**，启用严格类型检查；编译后的命令无第三方运行时依赖，也不需要修改 Pi。仓库公开，但 `package.json` 仍保留 `private: true`，防止误发布到已被占用的 npm 名称；不要用 `npm install -g pi-manager` 安装 npm 上的同名其他项目。
+安装器构建项目，在 `~/.pi-manager/pi-package` 创建管理器拥有的本地 Pi 包，再调用官方 `pi install <path>` 注册。**这一步会明确地在 Pi agent settings 中增加一个包声明。** 不复制或替换原有包、凭证、会话、模型和项目配置。
 
-### 安装为全局命令
-
-执行 `npm ci` 安装开发依赖后，在源码目录中打包并从本地包安装（后两步可离线，也不安装 Pi extension）。`npm pack` 会先自动编译 TypeScript：
+退出 Pi，在你的项目目录重新启动：
 
 ```bash
-npm pack --offline
-npm install --global ./pi-manager-0.4.0.tgz --offline --ignore-scripts --no-audit --no-fund
-pi-manager --version
+cd /你的项目目录
+pi
 ```
 
-安装后可以在任何项目目录中运行：
-
-```bash
-cd /path/to/your-project
-pi-manager
-# 或直接用指定 profile 启动 Pi
-pi-manager profile run review
-```
-
-Pi 使用启动时的当前目录作为工作目录。首次打开选择 `+ Create profile`，创建后添加包/资源，再选择 `Run Pi`。此安装是当前版本的独立副本；源码修改后需重新打包安装。开发时也可先执行 `npm run build`，再用 `npm link --offline` 创建命令链接；修改 `.ts` 后需重新构建。
-
-以下 CLI 示例使用已安装的 `pi-manager`；在源码目录中也可将其替换为 `node dist/index.js`（先构建）。
-
-### TUI
-
-- `↑` / `↓`、`PgUp` / `PgDn`：导航
-- `Enter`：打开详情或执行动作
-- `/`：搜索；搜索时 `Enter` 结束输入，再按一次打开
-- `Space`：切换包或资源的启用状态
-- `Esc`：返回；有搜索条件时先清空条件
-- 预览页支持垂直和水平滚动
+然后在 **Pi 输入框**中输入：
 
 ```text
-Profiles
-└── review
-    ├── Run Pi
-    ├── Packages
-    │   └── package detail / resource switches / uninstall
-    ├── Skills
-    ├── Context files
-    ├── Extensions
-    ├── Prompt templates
-    ├── Themes
-    ├── All resources
-    ├── Package generations / restore
-    ├── Package operation logs
-    ├── Set as default
-    ├── Copy profile
-    └── Delete profile
+/manager
 ```
 
-安装前显示包信息并确认第三方代码风险；卸载和删除也需要确认。界面是独立终端程序，不加载到 Pi 内部。
+安装后 `npm start` 只是启动普通 `pi`。请保留源码目录，因为注册包引用其编译后的实现；移动源码目录或更新代码后，重新执行 `npm ci`、`npm run install:pi -- --yes`，再重启 Pi。
 
-## 隔离边界
+GitHub 仓库公开；`package.json` 的 `private: true` 只防止误发布到 npm。npm 上同名包属于其他项目，**不要使用 `npm install -g pi-manager` 或 `pi install npm:pi-manager`**。仓库不提交 `dist/`，因此暂不支持直接用 Git URL 安装；请使用上面的 clone、build 和安装步骤。
 
-管理器自身的持久化状态放在 `~/.pi-manager/`：
+### 不注册，先试用
+
+```bash
+npm ci
+npm run build
+pi -e ./dist/extension.js
+```
+
+只在这次 Pi 启动提供 `/manager`。可以编辑暂存预设并发布快照，但普通 Pi 启动不会加载快照，直到执行安装器完成注册。不要同时加载直接扩展和已注册包，否则会重复注册 `/manager`。
+
+## 在 Pi 中使用
+
+打开 `/manager`，选择 **+ Create profile**，输入名称（例如 `review`）。
+
+此处 profile 表示**资源预设的暂存区**，不是切换当前 Pi 的凭证、会话或 agentDir。
+
+```text
+/manager
+├── review                         资源预设暂存区
+│   ├── Use on next Pi start       发布独立快照，供下次启动使用
+│   ├── Packages                   添加 / 更新 / 启停 / 卸载
+│   ├── Skills
+│   ├── Context files              创建 / 导入 / 在 Pi 内编辑
+│   ├── Extensions
+│   ├── Prompt templates
+│   ├── Themes
+│   ├── All resources              预览 / 启停 / 编辑管理器副本
+│   ├── Package generations / restore
+│   ├── Package operation logs
+│   ├── Copy profile
+│   └── Delete staging profile
+├── + Create profile
+├── Use manager only on next Pi start
+└── About / loading instructions
+```
+
+- 使用 Pi 原生列表、输入框和多行编辑器；`Enter` 打开，`/` 搜索（Enter 结束输入，再按一次打开），`Esc` 返回或先清空搜索。预览支持 `↑↓`、`PgUp` / `PgDn`。
+- 包详情和资源菜单有明确的 **Enable / Disable** 操作，不依赖旧独立 TUI 的空格切换。
+- 导入 Skill 选择包含 `SKILL.md` 的目录。导入资源会复制文件，之后编辑管理器副本不改原文件。
+- 包来源支持 `npm:name@version`、`git:github.com/owner/repo@ref`、本地路径。本地包是**外部引用**，不复制、不安装依赖、不删除其原目录。
+- 包操作和删除需确认。安装脚本仍有当前用户权限。
+
+### 编辑 → 发布 → 重启
+
+1. 在暂存 profile 中修改包、资源开关和上下文。
+2. 选择 **Use on next Pi start (publish snapshot)**。
+3. 正常退出 Pi，再重新启动。注册的本地包会在启动时提供选中的 extensions、skills、模板、主题和上下文。
+4. 再打开 `/manager`，标题分别显示**当前 loaded** 和**下次启动 next start** 的预设。
+
+发布会将管理器拥有的包/资源复制到独立快照。继续编辑或删除暂存 profile 不会删掉当前 Pi 使用的资源。外部本地包仍然只是引用，其自身文件变化不在此隔离范围内。快照暂不自动清理。
+
+选中预设是在当前普通 Pi 环境中**追加受管资源**，不会屏蔽原有个人/项目/共享资源，不改变项目信任，不切换凭证、模型配置或会话存储。资源名称冲突遵循 Pi 原有规则。选择 **Use manager only on next Pi start** 可在下次启动只加载管理器，不再导出预设资源。
+
+扩展不调用 `/reload`，不操作已加载的注册表，也不承诺立即卸载。发布后请完整重启，尤其是 extension 变化。你自行执行 `/reload` 属于 Pi 原生行为，不是管理器的事务恢复。
+
+## 预置上下文
+
+在 **Context files** 中创建或导入 Markdown，使用 Pi 自己的编辑器编辑副本。
+
+发布时，上下文内容与资源路径绑定到同一份启动快照。扩展通过公共 `before_agent_start` 事件中的独立 prompt section 追加这些内容；不覆盖 `AGENTS.md`、`CLAUDE.md`、`SYSTEM.md`、其他扩展的 section 或 Pi 整个系统提示词。
+
+暂存编辑不会悄悄改变当前已加载快照的指令。发布并重启后才使用新内容；关闭上下文也不会删除会话历史中的消息。
+
+## 包恢复
+
+包操作在独立 Node worker 中调用 Pi 公共 `DefaultPackageManager`。worker 只处理包文件，**不是另一个 Pi 对话，也没有独立终端界面**。
+
+1. 获取暂存 profile 独占锁。
+2. 将受管 npm/Git 文件复制到候选版本代，不硬链接当前文件。
+3. 在候选目录安装、更新或卸载。
+4. 校验包文件、manifest、所有权和资源路径，不执行 extensions。
+5. 记录内容摘要，用单次原子替换暂存 `settings.json` 切换包路径和过滤器，保留上一代。
+
+提交前失败时，当前暂存引用和受管包文件保持不变。**Package generations / restore** 离线校验上一代摘要，再恢复包和过滤配置；之后仍需发布并重启 Pi，才会使用恢复的版本。
+
+恢复不覆盖上下文、独立资源、凭证、模型文件、会话或默认/项目配置。本地外部包只恢复**引用**，不恢复历史文件内容。旧代受管文件改变或丢失时拒绝恢复，不静默联网下载其他版本。
+
+整包关闭将四类资源过滤器设为 `[]` 并保存原条目，重新启用恢复原过滤器。不使用 `autoload: false` 充当整包禁用，因为 Pi 对它有独立的增量过滤语义。“更新所有包”不会更新 Pi 本身。
+
+### 限制
+
+- 这不是 OS 沙箱或宿主机完整事务。第三方扩展/脚本仍有用户权限，外部写入、网络请求、数据库和 Pi 内存状态不能撤销。
+- 文件发现/校验不保证第三方代码、Skill 或主题运行时一定加载成功。
+- 受管快照内的依赖 symlink 会重定位；拒绝指向外部的 symlink、特殊文件和 linked Git worktree。导入资源拒绝 symlink。
+- 不完整的旧基线允许初始化，但不宣称可恢复；缺失的包声明不能被发布成误导性的空预设。
+- 提供当前/上一代切换，不提供任意历史选择。版本代及发布快照保留，会额外占磁盘。
+- 强制结束可能留下 `.lock` 或候选目录。确认相关 Pi/npm/Git 子进程全部退出后再手动清理，不自动抢占未知锁。
+- 原子文件替换是正常操作的发布边界，不是整个磁盘断电持久性的事务保证。
+
+## 存储和写入边界
 
 ```text
 ~/.pi-manager/
 ├── state.json
-└── profiles/
-    └── review/
-        ├── settings.json       # 此 profile 的 Pi 原生配置
-        ├── manager.json        # 上下文、整包禁用时的原配置等
-        ├── resources/          # 导入的资源副本
-        ├── .packages/          # 管理器拥有的包版本代，不覆盖当前使用的目录
-        │   └── <generation>/
-        │       ├── npm/        # 此版本的 npm 包、manifest 与锁文件
-        │       ├── git/        # 此版本的 Git 包副本
-        │       ├── settings.json
-        │       └── generation.json
-        ├── npm/                # 旧版布局可能保留；首次变更只复制，不移动/删除
-        ├── git/                # 旧版布局可能保留
-        ├── sessions/           # 此 profile 的会话
-        ├── auth.json           # 在此 profile 中登录后由 Pi 创建
-        └── .operations/        # 包操作日志
+├── profiles/<name>/
+│   ├── settings.json              暂存包声明和资源过滤器
+│   ├── manager.json               上下文及管理器 metadata
+│   ├── resources/                 可编辑的导入副本
+│   ├── .packages/<generation>/    包文件、锁文件和摘要
+│   └── .operations/               包操作日志
+└── pi-package/
+    ├── package.json               原子发布点，向 Pi 注册一次
+    └── .snapshots/<id>/           独立包/资源文件和上下文
 ```
 
-**不会主动修改：**
+**安装是“不改默认 Pi settings”的明确例外**：官方 `pi install` 增加本地管理器包声明。注册后的管理操作写自己的目录，不反复改默认 Pi settings。
 
-- 默认 `~/.pi/agent/settings.json` 和其资源目录
-- Pi 安装目录、源码、内置插件
-- 当前项目的 `.pi/`、`AGENTS.md` 或 `CLAUDE.md`
-- 父 shell 的环境变量
-- 导入资源的原文件、外部本地 package 的内容
+扩展不会自动导入默认 Pi 的资源，不改外部原文件、项目 `.pi`、父 shell 环境、Pi 源码/安装目录，也不复制凭证。npm/Git 缓存和第三方脚本仍可能在外部写入。
 
-包操作使用独立子进程中的 **Pi 公共 `DefaultPackageManager` SDK**，只在新建的候选版本代中处理包文件。校验成功后，通过 profile 的 `settings.json` 单次原子替换切换包路径和过滤器。Pi 看到的只是普通本地 package 路径，不需要补丁或扩展配合。源 npm/git 声明和版本代引用保存在管理器自己的 settings 字段中，管理界面仍显示原来源。不会执行 Pi 自更新入口。资源枚举同样复用 SDK，支持 manifest、glob 和 Pi 资源过滤，不导入/执行第三方 extension。
+当前 Pi 继续使用它自己的登录和会话。旧 CLI 隔离 profile 中的凭证、会话不会自动被 Pi 内扩展采用或共享。旧启动器正在使用某个暂存目录时，管理器锁仍会拒绝修改；无法可靠检测外部手动启动的进程。
 
-### 不是安全沙箱
+## 更新和卸载
 
-“无污染”是管理器的写入约定，**不等于限制第三方代码的系统权限**：
-
-- 包的安装脚本、加载到 Pi 的 extensions、外部编辑器仍有当前用户的权限。
-- npm/git 可能使用自己的缓存、凭证和 Git 配置；不能承诺它们不写任何外部文件。
-- 外部编辑使用临时文件，保存后才写回管理器资源副本。
-- 不自动共享默认 Pi 的凭证、模型配置或会话。第一次在 profile 中运行 Pi 时需自行登录，或使用环境变量提供凭证。
-- Pi 仍可能读取项目上下文 `AGENTS.md` / `CLAUDE.md`、`~/.agents/skills` 等原生发现来源。默认 `--no-approve` 只禁用信任控制下的项目配置，不等于关闭所有上下文发现。
-- UI 显示的是**下次启动配置**，不是一个已经运行的 Pi 进程的实时状态。
-
-## 包管理
+更新源码后：
 
 ```bash
-pi-manager profile create review
-pi-manager package inspect npm:pi-tool-display
-pi-manager package add review npm:pi-tool-display --yes
-pi-manager package list review
-pi-manager package disable review npm:pi-tool-display
-pi-manager package enable review npm:pi-tool-display
-pi-manager package update review --yes
-pi-manager package remove review npm:pi-tool-display --yes
-pi-manager package versions review
-pi-manager package rollback review --yes
+npm ci
+npm run install:pi -- --yes
+# 重启 Pi
 ```
 
-来源沿用 Pi 格式：`npm:name@version`、`git:github.com/owner/repo@ref` 或本地目录/模块绝对路径。**本地 package 是引用，不复制、不安装依赖、不删除原目录**；需要可编辑副本时用 resource import。
-
-整包关闭会将四类资源过滤器设为 `[]`，并在管理器 metadata 中保存原配置（旧布局为 `manager.json`，版本代模式为 `settings.json` 中的 `piManagerPackages`）；重新打开恢复原过滤器。**不使用 `autoload:false` 充当整包开关**，因为它在 Pi 中有独立的增量过滤语义。
-
-没有 source 的 update 显式执行“更新所有 packages”，不会更新 Pi。CLI 包操作要求 `--yes`，表示已知晓第三方代码/安装脚本执行风险。Git inspect 只说明来源，不能在未下载前验证其 manifest 或脚本。
-
-### 停止态版本切换与恢复
-
-1. 获取 profile 独占锁；管理器启动的 Pi 尚未退出时拒绝安装、更新、卸载和恢复。
-2. 将当前管理器拥有的 npm/git 文件复制到新的候选版本代。复制真实文件，不硬链接到当前包；依赖内部的 symlink 重定位到新副本，拒绝指向外部的链接和 linked Git worktree。
-3. 在候选目录中安装/更新/卸载，再检查包文件、manifest、资源路径和所有权；不加载 extension。校验不等于保证第三方代码运行正确。
-4. 记录包内容摘要、过滤器和上一代引用；通过单次原子 settings 替换发布新引用。只有这一步之后下次启动才会用新包。
-5. 失败时丢弃候选目录，当前包文件和配置引用不变；成功时保留上一代供恢复。
-
-`package rollback <profile> --yes` / TUI 的 **Package generations / restore**：
-
-- 离线校验上一代内容摘要、路径和包文件，然后切回原包路径、包选择及包资源过滤器。
-- 不恢复 `auth.json`、会话、模型、上下文文件或独立资源；不改默认 Pi 或项目配置。
-- 本地外部包只恢复其**引用**，不快照、覆盖或倒退其原目录内容。外部文件已被修改时，无法通过本功能恢复。
-- 上一代的管理器包文件如果发生变化或丢失，拒绝恢复，不静默重新下载别的版本。旧版本的 metadata、锁文件也保留在版本代内。
-- 可再次恢复到刚才离开的那一代；当前 UI 提供当前/上一代切换，不支持任意历史版本选择。
-
-旧布局第一次成功操作会先复制可用的包文件作为基线，旧目录原地保留。若复制的 profile 只有声明、还没有对应包文件，允许初始化，但不会宣称有一个可恢复的完整基线，结果会列出缺失项。
-
-**边界：**这不是对宿主机的完整事务回滚。安装脚本的外部写入、网络请求、数据库修改、Pi 内存状态无法撤销；第三方代码仍拥有用户权限。包代码本身如果擅自写到当前代之外，也不是目录隔离能防住的，需要 OS 沙箱。
-
-切换后的 Pi 原生 `packages` 字段是版本代内的本地路径，`pi-manager` 会映射回原 npm/git 来源。请在管理器中进行包更新/卸载和版本恢复，不要用 profile 内的原生包命令改这组受管声明；Pi 原生的本地包更新不会等价于更新原 npm/Git 来源。
-
-版本代目前不会自动清理，会占用额外磁盘空间，保留它们是为了避免误删当前或恢复目标。强制中止进程可能留下候选目录和 `.lock`；先确认 Pi/npm/git 子进程都已退出，不要在它们仍运行时手动清理。单文件替换保证普通操作的原子发布，不宣称断电时整个磁盘都具备事务持久性。
-
-## 资源管理
+使用官方命令移除注册（如设置了 `PI_MANAGER_HOME`，替换对应路径）：
 
 ```bash
-pi-manager resource list review
-pi-manager resource list review skills --json
-pi-manager resource import review skills ./my-skill
-pi-manager resource import review prompts ./review.md
-pi-manager resource preview review <resource-id>
-pi-manager resource disable review <resource-id>
-pi-manager resource enable review <resource-id>
-pi-manager resource edit review <resource-id>
-pi-manager resource remove review <resource-id> --yes
+pi remove "$HOME/.pi-manager/pi-package"
 ```
 
-类型为 `skills`、`extensions`、`prompts`、`themes`、`context`。
+再重启 Pi。此操作移除声明，不删除管理数据或源码。手动删除保留数据前先确认备份、停止相关进程。
 
-- 包内资源可预览、逐项启停；过滤器写入隔离 profile，不修改 package。
-- 外部/包内资源只读，不允许编辑或单独删除；可导入副本后编辑。
-- 导入会复制文件；skills 需是包含 `SKILL.md` 的目录，extension 目录需有 `index.ts` / `index.js`。
-- 导入拒绝 symlink，避免编辑或删除沿链接误触原文件。
-- 原生 skill frontmatter、theme 等格式仍需符合 Pi 规范；文件枚举不等于内容通过 Pi 加载校验。
-- 包的整包开关优先于包内逐项开关。
-- 预览限制 128 KiB，过大的文件不允许用内置编辑流程覆盖。
+## 可选维护 CLI
 
-## 预置上下文
+CLI 保留用于自动化及旧隔离 profile 维护，**不再是主要入口**；打开 `/manager` 不需要它。
 
 ```bash
-pi-manager context create review rules 'Focus on correctness and explain assumptions.'
-pi-manager context import review ./guidelines.md
-pi-manager context list review
-pi-manager context edit review rules
-pi-manager context preview review rules
-pi-manager context disable review rules
-pi-manager context enable review rules
-pi-manager context remove review rules --yes
+node dist/index.js --help
+node dist/index.js package versions review
+node dist/index.js package rollback review --yes
 ```
 
-上下文保存在 profile 的 `resources/context/*.md` 中；启用的文件通过 **`--append-system-prompt <file>`** 传给新启动的 Pi，不写或替换 `AGENTS.md`、`SYSTEM.md`。关闭后只影响后续启动，不改已保存会话的历史消息。
+旧独立 TUI 显式使用 `node dist/index.js tui`，CLI 不带参数改为显示帮助。旧 `profile run` 仍可启动隔离子进程，但 `/manager` 扩展不会调用它。CLI 修改同样需要回到 `/manager` 发布，才能影响注册的预设。
 
-## Profile 复制与启动
+如果之前装过全局 `pi-manager`，它仅是可选维护命令，更新方式：
 
 ```bash
-pi-manager profile copy review frontend
-pi-manager profile use frontend
-pi-manager profile run frontend
-pi-manager profile run frontend -- --offline
-pi-manager profile delete frontend --yes
+npm pack --offline
+npm install --global ./pi-manager-0.5.0.tgz --offline --ignore-scripts --no-audit --no-fund
+pi-manager install --yes
 ```
-
-复制包含 settings、管理器 metadata、导入的资源和 context；**不复制 auth、sessions、npm/git 安装目录或版本代引用**。原 npm/git 声明保留，依赖需在新 profile 中安装/由 Pi 解析，不会让新 profile 共用旧 profile 的版本目录。原本引用外部本地包的资源仍引用同一个外部只读来源。
-
-启动使用子进程环境 `PI_CODING_AGENT_DIR=<profile>` 和独立 `PI_CODING_AGENT_SESSION_DIR`，默认 `--no-approve`；需要项目资源时显式透传 `--approve`。不尝试更换已经运行的 Pi 的 agentDir，也不提供热卸载。
-
-管理器启动的 Pi 和包操作持有 profile lease；同一 profile 使用中拒绝其他管理操作。无法检测从外部手动启动的 Pi。崩溃后可能留下 `.lock`：**先确认相关 Pi/npm/git 进程已退出，再手动删除该文件**，不自动抢占不明进程的锁。
 
 ## 环境变量
 
 | 变量 | 用途 |
 |---|---|
-| `PI_MANAGER_HOME` | 管理器数据目录，默认 `~/.pi-manager`，不可与默认 Pi 目录重叠 |
-| `PI_MANAGER_PI` | Pi 启动命令/可执行文件，默认 `pi` |
-| `PI_MANAGER_SDK_PATH` | Pi SDK 包目录或公开入口文件；未设置时从 Node 模块或已安装 Pi launcher 查找 |
-| `PI_MANAGER_EDITOR` | 编辑器**可执行文件路径**；回退 `VISUAL`、`EDITOR`、`vi` |
+| `PI_MANAGER_HOME` | 默认 `~/.pi-manager`，不可与默认 Pi 重叠；安装及启动 Pi 时使用相同值。 |
+| `PI_MANAGER_PI` | 安装器/旧 CLI 使用的 Pi 可执行文件，默认 `pi`。 |
+| `PI_MANAGER_SDK_PATH` | worker 使用的公共 Pi SDK 包目录/入口；默认自动检测。 |
+| `PI_MANAGER_EDITOR` | 仅供旧 CLI 外部编辑；Pi 内直接使用 Pi 编辑器。 |
 
-编辑器字符串不经过 shell 求值；需要参数时用 wrapper 可执行文件。网络代理沿用进程环境变量，不修改 Pi 的 httpProxy 或 npm registry 配置。
+代理沿用进程环境，不改 npm registry 或 Pi proxy 配置。命令要求 agent 空闲，支持 Pi 交互 UI 或实现原生对话框的 RPC 客户端；print/JSON 模式不会打开管理器。打开、关闭管理器不调用模型。
 
-## 开发与测试
+## 开发和测试
 
 ```bash
-npm ci                # 安装 TypeScript 和 Node 类型（仅开发依赖）
-npm run typecheck     # 源码和测试的严格类型检查，不输出文件
-npm run build         # src/*.ts → dist/*.js
-npm test              # 编译源码和测试到 .test-dist/，再用 node:test 执行
+npm ci
+npm run typecheck
+npm run build
+npm test
 ```
 
-`src/` 和 `test/` 只维护 TypeScript；ESM 导入使用 `.js` 后缀，由 TypeScript NodeNext 解析到对应 `.ts`。`dist/`、`.test-dist/` 和 `node_modules/` 不提交到 Git。分发包只包含编译产物和文档，用户运行不需要安装 TypeScript。
+`src/` 和 `test/` 均为 TypeScript。NodeNext 的 `.js` 导入解析到 `.ts` 源码。`dist/`、`.test-dist/`、`node_modules/` 不提交 Git。
 
-测试使用临时管理器目录，包括路径防护、整包/逐项过滤、CLI、复制、上下文、失败恢复、切换失败注入、包字节校验和真实 Pi SDK 的本地包离线集成。还通过仅监听 loopback 的测试 registry 验证真实 npm 包安装、版本替换、删除及断开 registry 后的恢复，不访问外网。没有 Pi SDK 时集成测试显示 skip；可设置 `PI_MANAGER_SDK_PATH`。不需要模型 API key，不进行模型调用。
+`@earendil-works/pi-coding-agent`、`@earendil-works/pi-tui` 运行时由 Pi 提供，声明为可选 peer 和开发依赖，**不打包额外运行时副本**。分发包包含编译产物和两种 README。
 
-## 暂未实现
+测试覆盖命令注册、无 UI/忙碌/重复打开防护、原生对话框/编辑器、启动快照上下文、独立发布和失败发布、版本摘要恢复、symlink 与资源过滤。真实 Pi 集成在临时 agent 目录安装，检查 `/manager` 及导出的 extension、模板和 Skill 加载，并确认返回同一会话、不调用模型。真实 npm 测试使用 loopback registry，无需模型 API key。
 
-- 市场索引和远程搜索
-- 完整安装脚本审批/沙箱
-- 安装中可靠取消及整棵子进程树恢复
-- 外部脚本副作用、整台机器的事务回滚
-- 任意历史版本选择和旧版本自动清理
-- profile 跨进程实时切换；**热卸载明确不做**
-- 全局会话/凭证共享、自动写入默认 Pi 的导出功能
-- 单包资源有效上下文的精确 token 计数
+## 不做的功能
+
+热卸载、runtime monkey patch、在线切换凭证/agentDir、市场索引、OS 沙箱、外部副作用回滚、任意历史选择、自动清理快照、可靠取消整棵安装子进程树、单资源精确 token 计数。
 
 ## 许可证
 
