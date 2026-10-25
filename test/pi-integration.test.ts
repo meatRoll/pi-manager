@@ -19,6 +19,7 @@ interface RecordMessage {
   id?: string;
   method?: string;
   title?: string;
+  options?: string[];
   success?: boolean;
   command?: string;
   data?: { disposition?: string; messageCount?: number; commands?: { name: string }[] };
@@ -74,8 +75,19 @@ test('official install loads a snapshot into real Pi; /manager returns to that s
     assert.ok(names.includes('example')); assert.ok(names.includes('skill:example'));
     send({ id: 'manager', type: 'prompt', message: '/manager' });
     const dialog = await wait(record => record.type === 'extension_ui_request' && record.method === 'select');
+    assert.match(dialog.title!, /^pi-manager \/ preset \/ All/);
     assert.match(dialog.title!, /loaded: preset/);
-    send({ type: 'extension_ui_response', id: dialog.id, cancelled: true });
+    assert.ok(dialog.options?.some(option => option.includes('[x] example.js')));
+    assert.ok(dialog.options?.some(option => option.includes('[x] example · skills')));
+    send({ type: 'extension_ui_response', id: dialog.id, value: dialog.options!.find(option => option.includes('[x] example.js')) });
+    const actions = await wait(record => record.type === 'extension_ui_request' && record.method === 'select');
+    send({ type: 'extension_ui_response', id: actions.id, value: actions.options!.find(option => option.includes('Preview')) });
+    const preview = await wait(record => record.type === 'extension_ui_request' && record.method === 'select');
+    assert.match(preview.title!, /snapshot-example/);
+    send({ type: 'extension_ui_response', id: preview.id, value: 'Back' });
+    const returned = await wait(record => record.type === 'extension_ui_request' && record.method === 'select');
+    assert.match(returned.title!, /^pi-manager \/ preset \/ All/);
+    send({ type: 'extension_ui_response', id: returned.id, cancelled: true });
     const response = await wait(record => record.id === 'manager');
     assert.equal(response.success, true); assert.equal(response.data?.disposition, 'handled');
     send({ id: 'state', type: 'get_state' });

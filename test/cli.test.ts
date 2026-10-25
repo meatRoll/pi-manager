@@ -45,12 +45,17 @@ test('local package lifecycle and resource inventory through real Pi, offline', 
   const source = join(temp, 'fixture');
   await mkdir(join(source, 'skills', 'demo'), { recursive: true });
   await mkdir(join(source, 'prompts'), { recursive: true });
-  await writeFile(join(source, 'package.json'), JSON.stringify({ name: 'local-demo', version: '1.0.0', pi: { skills: ['./skills'], prompts: ['./prompts'] } }));
+  await mkdir(join(source, 'src'), { recursive: true });
+  await writeFile(join(source, 'package.json'), JSON.stringify({ name: 'local-demo', version: '1.0.0', pi: { skills: ['./skills'], prompts: ['./prompts'], extensions: ['./src/index.ts'] } }));
+  await writeFile(join(source, 'src/index.ts'), 'throw new Error("CLI inventory must not execute extensions");');
   await writeFile(join(source, 'skills/demo/SKILL.md'), '---\nname: demo\ndescription: A demo\n---\n# Demo');
   await writeFile(join(source, 'prompts/demo.md'), 'Demo prompt');
   ok(['package', 'add', 'review', source, '--yes']);
   let list: Resource[] = JSON.parse(ok(['resource', 'list', 'review', '--json']));
-  assert.equal(list.filter(r => r.origin === 'package').length, 2);
+  assert.equal(list.filter(r => r.origin === 'package').length, 3);
+  assert.equal(list.find(resource => resource.type === 'extensions')?.name, 'index.ts');
+  assert.equal(list.find(resource => resource.type === 'extensions')?.displayName, 'local-demo · src/index.ts');
+  assert.match(ok(['resource', 'list', 'review', 'extensions']), /local-demo · src\/index\.ts/);
   ok(['package', 'disable', 'review', source]);
   list = JSON.parse(ok(['resource', 'list', 'review', '--json']));
   assert.equal(list.some(r => r.origin === 'package' && r.enabled), false);
@@ -109,6 +114,25 @@ test('default Pi and project settings unchanged by real offline package operatio
   assert.equal(result.status, 0, result.stderr);
   assert.equal(await readFile(globalSettings, 'utf8'), sentinel);
   assert.equal(await readFile(projectSettings, 'utf8'), sentinel);
+});
+
+test('migrate CLI requires consent and imports into an empty staging profile without touching source settings', sdk ? {} : { skip: 'Installed Pi SDK required' }, async () => {
+  const source = join(temp, 'import-agent');
+  await mkdir(source);
+  const sourceText = JSON.stringify({ packages: ['../fixture', join(home, 'pi-package')] });
+  await writeFile(join(source, 'settings.json'), sourceText);
+  ok(['profile', 'create', 'imported']);
+  assert.match(command(['migrate', 'imported', source]).stderr, /--yes/);
+  assert.equal(command(['migrate', 'imported', source, 'unexpected', '--yes']).status, 1);
+  const output = ok(['migrate', 'imported', source, '--yes']);
+  assert.match(output, /Imported 1 packages/);
+  assert.match(output, /Skipped manager bundle/);
+  assert.match(output, /Original declarations remain active/);
+  assert.equal(await readFile(join(source, 'settings.json'), 'utf8'), sourceText);
+  const raw = JSON.parse(await readFile(join(home, 'profiles/imported/settings.json'), 'utf8'));
+  assert.deepEqual(raw.packages, [join(temp, 'fixture')]);
+  assert.ok(raw.piManagerPackages.active);
+  assert.equal(command(['migrate', 'imported', source, '--yes']).status, 1);
 });
 
 test('terminal strips control sequences from package/log content', () => {

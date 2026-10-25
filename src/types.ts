@@ -63,7 +63,10 @@ export interface InstalledPackage {
   version?: string;
   description?: string;
 }
-export interface InventoryPackage extends ConfiguredPackage, InstalledPackage {}
+export interface InventoryPackage extends ConfiguredPackage, InstalledPackage {
+  /** Presentation only; Git labels follow the configured repository. */
+  displayName: string;
+}
 export interface ResolvedResource {
   path: string;
   enabled: boolean;
@@ -80,6 +83,8 @@ export interface Resource {
   type: ResourceType;
   path: string;
   name: string;
+  /** Presentation only; never used for identity, file paths, or resource filters. */
+  displayName: string;
   enabled: boolean;
   origin: 'package' | 'standalone';
   source: string;

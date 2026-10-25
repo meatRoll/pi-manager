@@ -11,11 +11,13 @@ import { plain } from './terminal.js';
 import { errorCode, errorMessage } from './errors.js';
 import { VERSION } from './version.js';
 import { installPiExtension } from './install-pi.js';
+import { migratePiPackages } from './migration.js';
 
 const HELP = `pi-manager ${VERSION} — Pi resource manager extension
 
 Primary interface: type /manager INSIDE Pi. This CLI is optional/legacy.
   pi-manager install --yes                       Register extension bundle, then restart Pi
+  pi-manager migrate <profile> [agent-dir] --yes  Copy installed Pi packages into an empty staging profile
 
   pi-manager tui                                 Legacy standalone maintenance UI
   pi-manager profile list
@@ -69,8 +71,21 @@ export async function main(args: string[]) {
   if (command === 'tui') return openTui();
   if (['help', '--help', '-h'].includes(command)) return print(HELP);
   if (['--version', '-v'].includes(command)) return print(VERSION);
-  if (command === 'install') { acknowledge(args); return installPiExtension(true); }
   const rest = raw.filter(value => value !== '--yes' && value !== '--json');
+  if (command === 'install') { acknowledge(args); return installPiExtension(true); }
+  if (command === 'migrate') {
+    acknowledge(args);
+    const target = requireValue(subcommand, 'Profile');
+    if (rest.length > 1) throw new Error('Expected at most one source agent directory. See --help.');
+    const result = await migratePiPackages(target, rest[0]);
+    return print([
+      `Imported ${result.imported.length} packages into staging profile ${result.profile}; generation ${result.generation}.`,
+      `Source Pi settings unchanged: ${result.sourceAgentDir}`,
+      ...(result.externalLocal.length ? [`External local references: ${result.externalLocal.join(', ')}`] : []),
+      ...(result.skipped.length ? [`Skipped manager bundle: ${result.skipped.join(', ')}`] : []),
+      'Verify the import before publishing. Original declarations remain active; explicitly remove duplicates only after verification, before using the published copies.',
+    ].join('\n'));
+  }
   const [profileInput, value, extra, label] = rest;
   if (command === 'profile') {
     if (subcommand === 'list') {
@@ -121,7 +136,7 @@ export async function main(args: string[]) {
       const current = await inventory(profile);
       const filtered = current.resources.filter(resource => !(context || value) || resource.type === (context ? 'context' : value));
       if (raw.includes('--json')) return console.log(JSON.stringify(filtered, null, 2));
-      for (const resource of filtered) print(`${resource.id} [${resource.enabled ? 'x' : ' '}] ${resource.type}\t${resource.name}\t${resource.owned ? 'owned' : resource.origin}\t${resource.path}`);
+      for (const resource of filtered) print(`${resource.id} [${resource.enabled ? 'x' : ' '}] ${resource.type}\t${resource.displayName}\t${resource.owned ? 'owned' : resource.origin}\t${resource.path}`);
       return;
     }
     if (subcommand === 'import') return print(await importResource(profile, context ? 'context' : parseResourceType(requireValue(value, 'Type')), requireValue(context ? value : extra, 'Path'), context ? extra : label));

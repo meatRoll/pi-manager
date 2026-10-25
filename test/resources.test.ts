@@ -1,8 +1,10 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { expectDefined } from './helpers.js';
 
 const temp = await realpath(await mkdtemp(join(tmpdir(), 'pi-manager-resources-')));
@@ -43,8 +45,115 @@ test('SDK inventory finds manifest resources without executing extension code', 
   const skill = expectDefined(current.resources.find(r => r.type === 'skills'));
   assert.equal(skill.packageRoot, source);
   assert.equal(skill.owned, false);
+  assert.equal(skill.displayName, skill.name);
+  assert.equal(current.resources.find(resource => resource.name === 'a.md')?.displayName, 'a.md');
   assert.equal((await resources.previewResource('inventory', skill.id)).text.includes('# Demo'), true);
   await assert.rejects(resources.removeResource('inventory', skill.id), /Cannot delete/);
+});
+
+test('extension display labels distinguish packages and paths without changing names, IDs or filters', integration, async () => {
+  await core.createProfile('labels');
+  const packageAt = async (directory: string, name: string | undefined, entries: string[]) => {
+    const root = join(temp, directory);
+    await mkdir(root, { recursive: true });
+    await writeFile(join(root, 'package.json'), JSON.stringify({ name, pi: { extensions: entries } }));
+    for (const entry of entries) {
+      const path = join(root, entry);
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, 'throw new Error("MUST NOT EXECUTE FOR LABELS");');
+    }
+    return root;
+  };
+  const alpha = await packageAt('labels-alpha', 'alpha-package', ['src/index.ts', 'other/index.ts']);
+  const beta = await packageAt('labels-beta', '@scope/beta-package', ['index.ts']);
+  const unnamed = await packageAt('labels-unnamed', undefined, ['index.ts']);
+  const noManifest = join(temp, 'labels-no-manifest');
+  await mkdir(noManifest);
+  await writeFile(join(noManifest, 'index.js'), 'throw new Error("MUST NOT EXECUTE WITHOUT MANIFEST");');
+  const settings = await core.getSettings('labels');
+  settings.packages = [alpha, beta, unnamed, noManifest];
+  await core.saveSettings('labels', settings);
+  const standalone = join(temp, 'handoff.ts');
+  await writeFile(standalone, 'throw new Error("MUST NOT EXECUTE STANDALONE");');
+  const owned = await resources.importResource('labels', 'extensions', standalone);
+  const settingsPath = join(core.profilePath('labels'), 'settings.json');
+  const before = await readFile(settingsPath, 'utf8');
+  const current = await resources.inventory('labels');
+  const at = (path: string) => expectDefined(current.resources.find(resource => resource.path === path));
+  const a = at(join(alpha, 'src/index.ts'));
+  const sibling = at(join(alpha, 'other/index.ts'));
+  assert.equal(a.name, 'index.ts');
+  assert.equal(a.displayName, 'alpha-package · src/index.ts');
+  assert.equal(sibling.displayName, 'alpha-package · other/index.ts');
+  assert.equal(at(join(beta, 'index.ts')).displayName, '@scope/beta-package · index.ts');
+  assert.equal(at(join(unnamed, 'index.ts')).displayName, `${unnamed} · index.ts`);
+  assert.equal(at(noManifest).displayName, `${noManifest} · .`);
+  assert.equal(at(owned).displayName, 'handoff.ts');
+  assert.equal(at(owned).owned, true);
+  assert.equal(a.id, createHash('sha256').update(`extensions\0${alpha}\0${a.path}`).digest('hex').slice(0, 12));
+  assert.equal((await resources.previewResource('labels', a.id)).text, 'throw new Error("MUST NOT EXECUTE FOR LABELS");');
+  assert.equal(await readFile(settingsPath, 'utf8'), before); // labels are read-only metadata
+  await resources.toggleResource('labels', a.id, false);
+  assert.deepEqual((await core.getSettings('labels')).packages, [
+    { source: alpha, extensions: ['-src/index.ts'] }, beta, unnamed, noManifest,
+  ]);
+  const toggled = await resources.inventory('labels');
+  assert.equal(expectDefined(toggled.resources.find(resource => resource.id === a.id)).enabled, false);
+  assert.equal(expectDefined(toggled.resources.find(resource => resource.id === sibling.id)).enabled, true);
+  assert.equal(expectDefined(toggled.resources.find(resource => resource.source === beta)).enabled, true);
+  await writeFile(join(alpha, 'package.json'), JSON.stringify({ name: 'renamed-package', pi: { extensions: ['src/index.ts', 'other/index.ts'] } }));
+  const renamed = expectDefined((await resources.inventory('labels')).resources.find(resource => resource.id === a.id));
+  assert.equal(renamed.displayName, 'renamed-package · src/index.ts');
+  assert.equal(renamed.name, a.name);
+  assert.equal(renamed.path, a.path);
+  assert.equal(renamed.enabled, false);
+});
+
+test('local Git labels follow origin without changing source, IDs, filters or external files', integration, async () => {
+  await core.createProfile('local-origin');
+  const source = join(temp, 'local-origin-package'); await mkdir(source);
+  const manifest = JSON.stringify({ name: '@upstream/todos', pi: { extensions: ['./index.ts'] } });
+  const text = 'throw new Error("MUST NOT EXECUTE LOCAL ORIGIN FIXTURE");';
+  await writeFile(join(source, 'package.json'), manifest); await writeFile(join(source, 'index.ts'), text);
+  const git = (...args: string[]) => execFileSync('git', ['-C', source, ...args], { stdio: 'pipe' });
+  git('init'); git('config', '--local', 'remote.origin.url', 'https://github.com/meatRoll/pi-todos.git');
+  const config = await readFile(join(source, '.git/config'), 'utf8');
+  const settings = await core.getSettings('local-origin'); settings.packages = [source]; await core.saveSettings('local-origin', settings);
+  const settingsPath = join(core.profilePath('local-origin'), 'settings.json'); const before = await readFile(settingsPath, 'utf8');
+  const current = await resources.inventory('local-origin');
+  const item = expectDefined(current.resources.find(resource => resource.source === source));
+  assert.equal(current.packages[0].displayName, 'meatRoll/pi-todos');
+  assert.equal(current.packages[0].name, '@upstream/todos');
+  assert.equal(item.displayName, 'meatRoll/pi-todos · index.ts');
+  assert.equal(item.name, 'index.ts'); assert.equal(item.path, join(source, 'index.ts')); assert.equal(item.owned, false);
+  assert.equal(item.id, resources.resourceId('extensions', item.path, source));
+  assert.equal(await readFile(settingsPath, 'utf8'), before);
+  assert.equal(await readFile(join(source, '.git/config'), 'utf8'), config);
+  await resources.toggleResource('local-origin', item.id, false);
+  assert.deepEqual((await core.getSettings('local-origin')).packages, [{ source, extensions: ['-index.ts'] }]);
+  const toggledSettings = await readFile(settingsPath, 'utf8');
+  git('config', '--local', 'remote.origin.url', 'git@github.com:meatRoll/renamed-todos.git');
+  const renamed = expectDefined((await resources.inventory('local-origin')).resources.find(resource => resource.id === item.id));
+  assert.equal(renamed.displayName, 'meatRoll/renamed-todos · index.ts'); assert.equal(renamed.enabled, false);
+  assert.equal(renamed.source, source); assert.equal(renamed.path, item.path);
+  git('config', '--local', '--unset', 'remote.origin.url');
+  const fallback = expectDefined((await resources.inventory('local-origin')).resources.find(resource => resource.id === item.id));
+  assert.equal(fallback.displayName, '@upstream/todos · index.ts'); assert.equal(fallback.enabled, false);
+  assert.equal(await readFile(settingsPath, 'utf8'), toggledSettings);
+  assert.equal(await readFile(join(source, 'package.json'), 'utf8'), manifest);
+  assert.equal(await readFile(join(source, 'index.ts'), 'utf8'), text);
+});
+
+test('inventory cancellation rejects without executing extensions or changing profile files', integration, async () => {
+  await setup('cancel-discovery');
+  const path = join(core.profilePath('cancel-discovery'), 'settings.json');
+  const before = await readFile(path, 'utf8');
+  const controller = new AbortController();
+  const pending = resources.inventory('cancel-discovery', { signal: controller.signal });
+  setTimeout(() => controller.abort(), 30);
+  await assert.rejects(pending, { name: 'AbortError' });
+  await assert.rejects(resources.inventory('cancel-discovery', { signal: controller.signal }), { name: 'AbortError' });
+  assert.equal(await readFile(path, 'utf8'), before);
 });
 
 test('per-resource toggles preserve sibling state and respect whole-package disable', integration, async () => {
@@ -109,6 +218,7 @@ test('profile copy leaves credentials, sessions and installation files behind', 
   const copied = await resources.inventory('copy');
   const context = expectDefined(copied.resources.find(r => r.type === 'context'));
   assert.equal(context.name, 'rules');
+  assert.equal(context.displayName, 'rules');
   assert.equal((await resources.previewResource('copy', context.id)).text, 'Copy these instructions');
   await assert.rejects(readFile(join(core.profilePath('copy'), 'auth.json')), /ENOENT/);
 });

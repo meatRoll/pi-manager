@@ -59,12 +59,12 @@ export async function openTui() {
       if (!configured) return;
       pkg = configured;
       const owned = current.resources.filter(resource => resource.origin === 'package' && resource.source === pkg.source);
-      const result = await ui.select<TuiEntry>(pkg.name || pkg.source, [
+      const result = await ui.select<TuiEntry>(pkg.displayName, [
         { label: pkg.enabled ? 'Disable package' : 'Enable package', value: 'toggle' },
         { label: 'View package details', value: 'detail' },
         { label: 'Update package', value: 'update' },
         { label: 'Uninstall package', value: 'remove' },
-        ...owned.map(resource => ({ label: `[${resource.enabled ? 'x' : ' '}] ${resource.type}: ${resource.name}`, resource, toggle: true })),
+        ...owned.map(resource => ({ label: `[${resource.enabled ? 'x' : ' '}] ${resource.type}: ${resource.displayName}`, resource, toggle: true })),
       ], `${pkg.version || 'local'} · ${pkg.enabled ? 'enabled' : 'disabled'} · next-launch configuration`);
       if (!result) return;
       const resource = result.entry.resource;
@@ -78,7 +78,7 @@ export async function openTui() {
     }
   };
   const resourcePage = async (profile: string, resource: Resource) => {
-    const result = await ui.select(resource.name, [
+    const result = await ui.select(resource.displayName, [
       { label: 'Preview', value: 'preview' },
       { label: resource.enabled ? 'Disable' : 'Enable', value: 'toggle' },
       ...(resource.owned ? [{ label: 'Edit with external editor', value: 'edit' }, { label: 'Delete owned copy', value: 'delete' }] : []),
@@ -87,10 +87,10 @@ export async function openTui() {
     await guard(async () => {
       if (result.entry.value === 'preview') {
         const preview = await previewResource(profile, resource.id);
-        await ui.view(resource.name, `${preview.path}\n\n${preview.text}${preview.truncated ? '\n[preview truncated]' : ''}`);
+        await ui.view(resource.displayName, `${preview.path}\n\n${preview.text}${preview.truncated ? '\n[preview truncated]' : ''}`);
       } else if (result.entry.value === 'toggle') await toggleResource(profile, resource.id, !resource.enabled);
       else if (result.entry.value === 'edit') await editResource(profile, resource, ui);
-      else if (result.entry.value === 'delete' && await ui.confirm('Delete owned resource?', resource.name)) await removeResource(profile, resource.id);
+      else if (result.entry.value === 'delete' && await ui.confirm('Delete owned resource?', resource.displayName)) await removeResource(profile, resource.id);
     });
   };
   const resourcesPage = async (profile: string, type: ResourceType | null) => {
@@ -102,7 +102,7 @@ export async function openTui() {
       const result = await ui.select<TuiEntry>(type || 'All resources', [
         { label: '+ Import local resource', value: 'import' },
         ...(type === 'context' ? [{ label: '+ Create context', value: 'create' }] : []),
-        ...entries.map(resource => ({ label: `[${resource.enabled ? 'x' : ' '}] ${resource.name}`, detail: `${resource.type} · ${resource.origin}${resource.owned ? ' · owned' : ''}`, resource, toggle: true })),
+        ...entries.map(resource => ({ label: `[${resource.enabled ? 'x' : ' '}] ${resource.displayName}`, detail: `${resource.type} · ${resource.origin}${resource.owned ? ' · owned' : ''}`, resource, toggle: true })),
       ], 'Space toggles next-launch enablement. Package/external originals are read-only.');
       if (!result) return;
       const resource = result.entry.resource;
@@ -171,7 +171,7 @@ export async function openTui() {
           while (true) {
             const current = await inventory(profile);
             const choice = await ui.select<TuiEntry>('Packages', [{ label: '+ Add package', value: 'add' }, { label: 'Update all packages', value: 'update' },
-              ...current.packages.map(pkg => ({ label: `[${pkg.enabled ? 'x' : ' '}] ${pkg.name || pkg.source}`, detail: pkg.version, pkg, toggle: true })),
+              ...current.packages.map(pkg => ({ label: `[${pkg.enabled ? 'x' : ' '}] ${pkg.displayName}`, detail: pkg.version, pkg, toggle: true })),
             ], 'Installed ≠ enabled. All changes apply on the next launch.');
             if (!choice) break;
             await guard(async () => {

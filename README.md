@@ -2,6 +2,8 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
+**v1.0.0 — first stable release.** [Release notes](CHANGELOG.md) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
+
 A **Pi extension** for managing packages, skills, extensions, prompt templates, themes, and preset Markdown context **inside Pi**.
 
 ```text
@@ -12,7 +14,7 @@ No separate manager process or nested Pi session is required. Written in **TypeS
 
 ## Install
 
-Requires **Node.js 22.19+** and Pi. Tested with **Pi 1.3.0**.
+Requires **Node.js 22.19+**, Git, and Pi. Tested with **Pi 1.3.0**.
 
 ```bash
 git clone https://github.com/meatRoll/pi-manager.git
@@ -52,32 +54,32 @@ This provides `/manager` for one invocation only. You can edit staging profiles 
 
 ## Use inside Pi
 
-Open `/manager`, select **+ Create profile**, then enter a name such as `review`.
+Open `/manager`. It goes straight to your **default staging preset** (for example `mine`), falling back to an existing loaded/published preset or the first available one. If there are no presets, select **+ Create profile**. Press **S** to switch presets or create another; switching the editor does not publish or change the running Pi.
 
 Here a profile is a **staging resource preset**, not a way to switch the running Pi's credentials, sessions, or agent directory.
 
 ```text
-/manager
-├── review                         Staging resource preset
-│   ├── Use on next Pi start       Publish a detached snapshot
-│   ├── Packages                   Add / update / enable / disable / remove
-│   ├── Skills
-│   ├── Context files              Create / import / edit inside Pi
-│   ├── Extensions
-│   ├── Prompt templates
-│   ├── Themes
-│   ├── All resources              Preview / toggle / edit owned copies
-│   ├── Package generations / restore
-│   ├── Package operation logs
-│   ├── Copy profile
-│   └── Delete staging profile
-├── + Create profile
-├── Use manager only on next Pi start
-└── About / loading instructions
+pi-manager / mine                         [S switch preset]
+loaded: mine · next start: mine
+Unpublished changes · P publish for next start
+
+[All]  Extensions  Skills  Context  Packages  More
+
+[x] meatRoll/pi-inspect-image · src/index.ts   extensions · package
+[x] handoff.ts                             extensions · standalone · owned
+[x] pptx-preview                           skills · standalone · owned
+[x] APPEND_SYSTEM                          context · standalone · owned
+
+Space toggle · Enter preview · E edit · A add · P publish
+←→ / Tab category · S switch preset · / search · Esc close
 ```
 
-- Use Pi-native lists, input dialogs, and the multi-line editor. `Enter` opens an item; `/` searches (press Enter to finish searching, then again to open). `Esc` returns or clears search first. Preview screens support `↑↓` and `PgUp` / `PgDn`.
-- Package detail and resource menus contain explicit **Enable / Disable** actions. The standalone UI's Space-toggle behavior is not required here.
+- **Space** toggles the selected resource/package directly in staging. **Enter** previews a resource, or opens package actions. **E** edits an owned copy; **Del** deletes an owned copy after confirmation. External/package originals stay read-only.
+- **←→** or **Tab / Shift+Tab** changes category on the same screen. **/** searches (Enter finishes searching; Enter again opens). Each category keeps its selection and search after preview, editing, or toggling. **Esc** clears search first, then closes. Preview supports `↑↓` and `PgUp` / `PgDn`.
+- **A** adds to the current category; **P** publishes only after confirmation. **R** refreshes metadata after edits from another process. The terminal panel opens immediately; resource discovery and the full byte comparison run in the background. Rows become usable before that comparison finishes, and the header says **Checking publication…** until a result is known. It then marks unpublished changes or an unknown comparison instead of claiming the live session changed. Closing or switching cancels the read-only work. External local packages are references, not tracked historical copies.
+- **More** groups prompt templates, themes, preset management/default selection, package import, update-all, restore, logs, copy/delete, manager-only publication, and help.
+- RPC clients receive the same flat resource list with explicit category/action dialogs; terminal-only shortcuts are not required. The first list waits only for resource metadata, not the full byte comparison. Because RPC cannot patch an open dialog, a completed check appears in the next dialog.
+- Package extensions display as `package-label · src/index.ts`, so identical entry filenames are distinguishable. Git labels follow the **configured repository** (for example `meatRoll/pi-image-gen`), not a possibly inherited upstream manifest name; non-GitHub hosts stay visible. npm labels use the configured package name, including its scope. Local packages with their own Git checkout use its `origin` repository (read locally, with no network access); otherwise they use the manifest name or configured path. Parent repositories and inherited manifest repository URLs are not used. Package lists use the same labels; raw manifest names remain available in package details. Standalone filenames are unchanged. These are display labels only, not renamed files, sources, or resource IDs.
 - Skill imports select a directory containing `SKILL.md`. Resource imports copy files, so editing a manager-owned copy does not edit the original.
 - Package sources accept `npm:name@version`, `git:github.com/owner/repo@ref`, and local paths. Local packages remain external references: no dependency installation, copying, or deletion of their original directories.
 - Package operations and deletion ask for confirmation. Installation scripts have your user permissions.
@@ -85,19 +87,45 @@ Here a profile is a **staging resource preset**, not a way to switch the running
 ### Save, publish, restart
 
 1. Edit packages, resource switches, and context in a staging profile.
-2. Select **Use on next Pi start (publish snapshot)**.
+2. Press **P** and confirm **Use on next Pi start?** (RPC: **Publish for next Pi start**).
 3. Exit Pi normally and start it again. The registered local package supplies the selected extensions, skills, templates, themes, and context at startup.
 4. Open `/manager` again. Its header distinguishes the **loaded** preset from the selection published for the **next start**.
 
 Publishing copies owned package/resource bytes into a detached snapshot. Editing or deleting the staging profile does not remove files used by the live session. External local packages remain references, so their own edits are not isolated. Snapshots currently have no automatic garbage collection.
 
-A selected preset **adds managed resources to your normal Pi environment**. It does not suppress existing personal/project/shared resources, change project trust, or switch credentials/model configuration/session storage. Names can conflict with existing resources; normal Pi collision rules apply. Choose **Use manager only on next Pi start** to stop exporting preset resources on the next launch.
+A selected preset **adds managed resources to your normal Pi environment**. It does not suppress existing personal/project/shared resources, change project trust, or switch credentials/model configuration/session storage. Names can conflict with existing resources; normal Pi collision rules apply. Choose **More → Use manager only on next Pi start** to stop exporting preset resources on the next launch.
 
 The extension does not call `/reload`, manipulate active runtime registries, or promise immediate unloading. Use a full restart after publishing, particularly for extension changes. Running `/reload` yourself uses Pi's native behavior and is not a transactional rollback.
 
+## Import existing Pi packages
+
+To bring the packages already declared in your personal Pi settings into the manager:
+
+1. Create an **empty** staging profile (for example, `mine`).
+2. Select **More → Import packages from current Pi**. Review the source agent directory in the confirmation.
+3. Review the imported packages and resource inventory. The manager bundle itself is skipped.
+4. After verification, plan the cutover: back up your source `settings.json`, explicitly remove only the migrated package declarations from that source, and publish the profile with **P → Use on next Pi start?**. Keep the manager bundle declaration and original package directories. Restart Pi and verify the loaded profile.
+
+**Import is a read-only-source staging operation, not an automatic cutover.** It does not publish, remove default declarations, or alter the running Pi. Leaving original declarations active alongside published copies can load extensions twice and cause command/tool conflicts, including a Pi startup failure. Do not use the published copies until duplicate declarations have been explicitly dealt with. For rollback, use manager-only publication and restore the saved declarations before restarting.
+
+Import copies the existing agent's entire owned `npm/` and `git/` trees into a validated package generation without downloads, dependency installation, or extension execution. Stop concurrent source package installs/updates while importing. Missing installations, external symlinks, or linked Git worktrees are refused rather than silently reinstalled. Package resource filters are preserved. Relative local package paths are resolved from the original settings file and remain **external references**; their files are not copied, edited, or deleted.
+
+Only package declarations plus `npmCommand` / `httpProxy` package-manager settings are imported. Credentials, sessions, models, user instructions, standalone resources, and project configuration are not copied. Profiles with package history cannot be imported over; use a new empty profile instead.
+
+Optional CLI equivalent (also staging-only):
+
+```bash
+node dist/index.js profile create mine
+node dist/index.js migrate mine --yes
+# Or specify a different existing Pi agent directory:
+# node dist/index.js migrate mine /path/to/agent --yes
+```
+
+The default source is `PI_MANAGER_SOURCE_AGENT_DIR`, then `PI_CODING_AGENT_DIR`, then `~/.pi/agent`.
+
 ## Context
 
-Create or import Markdown under **Context files**. The native Pi editor edits the manager-owned copy.
+Select the **Context** tab and press **A** to create or import Markdown. Select a context and press **E** to edit the manager-owned copy in Pi's editor.
 
 On publication, enabled context contents are bound to the same startup snapshot as the resource paths. The extension adds them through a dedicated public `before_agent_start` prompt section. It does not overwrite `AGENTS.md`, `CLAUDE.md`, `SYSTEM.md`, other extensions' sections, or Pi's whole prompt.
 
@@ -113,7 +141,7 @@ Package mutations use Pi's public `DefaultPackageManager` in a separate Node wor
 4. Validate package files, manifests, ownership, and resource paths without executing extensions.
 5. Record digests and atomically replace one staging `settings.json` to select package paths and filters together. Keep the previous generation.
 
-A failure before commit leaves active staging references and owned package bytes unchanged. **Package generations / restore** validates the previous digest offline and switches packages and filters back. Publish afterward and restart Pi to use the restored version.
+A failure before commit leaves active staging references and owned package bytes unchanged. **More → Package generations / restore** validates the previous digest offline and switches packages and filters back. Publish afterward and restart Pi to use the restored version.
 
 Restore does not overwrite contexts, standalone resources, credentials, model files, sessions, or default/project configuration. External local packages restore **references only**, never historical source contents. Changed or missing owned snapshot files cause restore to fail rather than silently downloading another version.
 
@@ -147,7 +175,7 @@ Whole-package disable sets all four resource filters to `[]` and preserves the p
 
 **Installation is the explicit exception to “do not change default Pi settings”:** the official `pi install` adds the local manager package declaration. After registration, manager actions write to their own data directory, not repeatedly to default Pi settings.
 
-The extension does not import existing default Pi resources into managed profiles, edit external originals, rewrite project `.pi` files, copy credentials, change the parent shell environment, or modify Pi's source/install directory. npm/Git caches and third-party scripts can still have external side effects.
+The extension does not automatically import default Pi resources. Explicit package import is read-only on the source. It does not edit external originals, rewrite project `.pi` files, copy credentials, change the parent shell environment, or modify Pi's source/install directory. npm/Git caches and third-party scripts can still have external side effects.
 
 The current Pi continues to use its normal authentication and sessions. Old CLI-created isolated profile credentials/sessions are not adopted or shared by the in-Pi extension. Profile mutation locks still apply when a legacy manager-launched Pi uses that staging directory; externally launched processes cannot be detected reliably.
 
@@ -185,7 +213,7 @@ If you previously installed a global `pi-manager` command, it is optional. To up
 
 ```bash
 npm pack --offline
-npm install --global ./pi-manager-0.5.0.tgz --offline --ignore-scripts --no-audit --no-fund
+npm install --global ./pi-manager-1.0.0.tgz --offline --ignore-scripts --no-audit --no-fund
 pi-manager install --yes
 ```
 
@@ -196,6 +224,7 @@ pi-manager install --yes
 | `PI_MANAGER_HOME` | Manager data; default `~/.pi-manager`, must not overlap default Pi. Use the same value during install and Pi startup. |
 | `PI_MANAGER_PI` | Pi executable used by installer/legacy CLI; default `pi`. |
 | `PI_MANAGER_SDK_PATH` | Public installed Pi SDK package/entry for worker operations; otherwise detected automatically. |
+| `PI_MANAGER_SOURCE_AGENT_DIR` | Optional source agent directory for explicit package import; otherwise the current Pi agent or `~/.pi/agent`. |
 | `PI_MANAGER_EDITOR` | External editor for the legacy CLI only. In-Pi editing uses Pi's editor. |
 
 Network proxies are inherited; the manager does not rewrite npm registry or Pi proxy settings. The command requires an idle session and interactive Pi UI; an RPC client supporting native dialogs also works. Print/JSON mode does not open the manager. Opening or closing it makes no model call.
@@ -211,9 +240,9 @@ npm test
 
 `src/` and `test/` are TypeScript. NodeNext imports use `.js` extensions resolved to `.ts` sources. `dist/`, `.test-dist/`, and `node_modules/` are not committed.
 
-Pi supplies `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui` at runtime. They are optional peers and development-only dependencies, **not bundled runtime copies**. Distribution archives include compiled files and both READMEs.
+Pi supplies `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui` at runtime. They are optional peers and development-only dependencies, **not bundled runtime copies**. Distribution archives include compiled files, both READMEs, and the changelog.
 
-Tests cover command registration, non-UI/busy/reentrant guards, native dialog/editor flows, snapshot context binding, detached publication, failed publications, package digests/recovery, symlink protection, and resource filters. Real Pi integration installs into a temporary agent directory and checks that `/manager`, exported extensions, prompts, and skills load and the command returns to the same session without a model call. npm lifecycle tests use an in-process loopback registry. No model API key is needed.
+Tests cover command registration, non-UI/busy/reentrant guards, flat dashboard shortcuts/search/selection/resize, publication-status comparisons, native dialog/editor flows, read-only package migration and failure cleanup, snapshot context binding, detached publication, failed publications, package digests/recovery, symlink protection, and resource filters. Real Pi integration installs into a temporary agent directory and checks that `/manager`, exported extensions, prompts, and skills load and the command returns to the same session without a model call. npm lifecycle tests use an in-process loopback registry. No model API key is needed.
 
 ## Out of scope
 

@@ -78,8 +78,8 @@ export async function view(ctx: ExtensionCommandContext, title: string, content:
 }
 
 /** Status feedback only; never writes subprocess output into Pi's terminal. */
-export async function working<T>(ctx: ExtensionCommandContext, label: string, action: () => Promise<T>): Promise<T> {
+export async function working<T>(ctx: ExtensionCommandContext, label: string, action: () => Promise<T>, announce = true): Promise<T> {
   ctx.ui.setStatus('pi-manager-operation', plain(label));
-  ctx.ui.notify(label, 'info');
+  if (announce) ctx.ui.notify(label, 'info');
   try { return await action(); } finally { ctx.ui.setStatus('pi-manager-operation', undefined); }
 }

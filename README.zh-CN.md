@@ -2,6 +2,8 @@
 
 [English](README.md) | **简体中文**
 
+**v1.0.0 — 首个正式版本。** [版本说明](CHANGELOG.md#简体中文) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
+
 一个**在 Pi 里面使用的扩展**，管理插件包、Skills、Extensions、提示词模板、主题和预置 Markdown 上下文。
 
 ```text
@@ -12,7 +14,7 @@
 
 ## 安装
 
-需要 **Node.js 22.19+** 和已安装的 Pi；当前在 **Pi 1.3.0** 验证。
+需要 **Node.js 22.19+**、Git 和已安装的 Pi；当前在 **Pi 1.3.0** 验证。
 
 ```bash
 git clone https://github.com/meatRoll/pi-manager.git
@@ -52,32 +54,32 @@ pi -e ./dist/extension.js
 
 ## 在 Pi 中使用
 
-打开 `/manager`，选择 **+ Create profile**，输入名称（例如 `review`）。
+打开 `/manager` 会**直接进入默认暂存预设**（例如 `mine`）；默认项不存在时，回退到已有的 loaded/published 预设或第一个预设。没有预设时选择 **+ Create profile**。按 **S** 切换预设或新建；切换编辑对象不会发布或改变当前 Pi。
 
 此处 profile 表示**资源预设的暂存区**，不是切换当前 Pi 的凭证、会话或 agentDir。
 
 ```text
-/manager
-├── review                         资源预设暂存区
-│   ├── Use on next Pi start       发布独立快照，供下次启动使用
-│   ├── Packages                   添加 / 更新 / 启停 / 卸载
-│   ├── Skills
-│   ├── Context files              创建 / 导入 / 在 Pi 内编辑
-│   ├── Extensions
-│   ├── Prompt templates
-│   ├── Themes
-│   ├── All resources              预览 / 启停 / 编辑管理器副本
-│   ├── Package generations / restore
-│   ├── Package operation logs
-│   ├── Copy profile
-│   └── Delete staging profile
-├── + Create profile
-├── Use manager only on next Pi start
-└── About / loading instructions
+pi-manager / mine                         [S switch preset]
+loaded: mine · next start: mine
+Unpublished changes · P publish for next start
+
+[All]  Extensions  Skills  Context  Packages  More
+
+[x] meatRoll/pi-inspect-image · src/index.ts   extensions · package
+[x] handoff.ts                             extensions · standalone · owned
+[x] pptx-preview                           skills · standalone · owned
+[x] APPEND_SYSTEM                          context · standalone · owned
+
+Space toggle · Enter preview · E edit · A add · P publish
+←→ / Tab category · S switch preset · / search · Esc close
 ```
 
-- 使用 Pi 原生列表、输入框和多行编辑器；`Enter` 打开，`/` 搜索（Enter 结束输入，再按一次打开），`Esc` 返回或先清空搜索。预览支持 `↑↓`、`PgUp` / `PgDn`。
-- 包详情和资源菜单有明确的 **Enable / Disable** 操作，不依赖旧独立 TUI 的空格切换。
+- **空格**直接启停所选资源/包，只改暂存。**Enter**直接预览资源，选中包则打开操作菜单。**E** 编辑管理器副本；**Del** 确认后删除副本。外部/包内原文件仍只读。
+- **←→** 或 **Tab / Shift+Tab** 在同一页切换分类。**/** 搜索（Enter 结束输入，再按一次打开）；每个分类在预览、编辑、启停后保留选中项和搜索条件。**Esc** 先清空搜索，再退出。预览支持 `↑↓`、`PgUp` / `PgDn`。
+- **A** 向当前分类添加；**P** 确认后发布。其他进程修改后按 **R** 刷新。终端面板先显示，资源发现与完整内容比较放在后台；资源列表先可操作，检查结束前标题显示 **Checking publication…**，之后再提示未发布修改或无法确定的状态，不冒充当前会话已生效。关闭或切换会取消只读检查。本地外部包只是引用，不追踪历史副本。
+- **More** 收拢模板、主题、预设管理/默认项、包导入、全部更新、恢复、日志、复制/删除、manager-only 发布及说明。
+- RPC 客户端使用同样的扁平资源列表，通过明确的分类/操作对话框交互，不依赖终端快捷键。首个列表只等资源 metadata，不再等待完整内容比较；RPC 无法修改已经打开的对话框，检查结果会在下次对话框中显示。
+- 包内 Extension 显示为 `包标签 · src/index.ts`，便于区分同名入口。Git 包优先使用**实际配置的仓库**（如 `meatRoll/pi-image-gen`），不使用可能残留的上游 manifest 名称；非 GitHub 来源保留主机名。npm 包使用配置中的包名（保留 scope）；本地包若有独立 Git 仓库，则只读使用其 `origin` 仓库标签（不访问网络）；否则使用 manifest 名称或配置路径，不会借用父目录仓库或可能残留的 manifest 仓库 URL。包列表保持相同标签，原始 manifest 名称仍可在包详情中查看。独立文件名不变；这些只是显示标签，不会重命名文件、修改来源或改变资源 ID。
 - 导入 Skill 选择包含 `SKILL.md` 的目录。导入资源会复制文件，之后编辑管理器副本不改原文件。
 - 包来源支持 `npm:name@version`、`git:github.com/owner/repo@ref`、本地路径。本地包是**外部引用**，不复制、不安装依赖、不删除其原目录。
 - 包操作和删除需确认。安装脚本仍有当前用户权限。
@@ -85,19 +87,45 @@ pi -e ./dist/extension.js
 ### 编辑 → 发布 → 重启
 
 1. 在暂存 profile 中修改包、资源开关和上下文。
-2. 选择 **Use on next Pi start (publish snapshot)**。
+2. 按 **P**，确认 **Use on next Pi start?**（RPC 中选 **Publish for next Pi start**）。
 3. 正常退出 Pi，再重新启动。注册的本地包会在启动时提供选中的 extensions、skills、模板、主题和上下文。
 4. 再打开 `/manager`，标题分别显示**当前 loaded** 和**下次启动 next start** 的预设。
 
 发布会将管理器拥有的包/资源复制到独立快照。继续编辑或删除暂存 profile 不会删掉当前 Pi 使用的资源。外部本地包仍然只是引用，其自身文件变化不在此隔离范围内。快照暂不自动清理。
 
-选中预设是在当前普通 Pi 环境中**追加受管资源**，不会屏蔽原有个人/项目/共享资源，不改变项目信任，不切换凭证、模型配置或会话存储。资源名称冲突遵循 Pi 原有规则。选择 **Use manager only on next Pi start** 可在下次启动只加载管理器，不再导出预设资源。
+选中预设是在当前普通 Pi 环境中**追加受管资源**，不会屏蔽原有个人/项目/共享资源，不改变项目信任，不切换凭证、模型配置或会话存储。资源名称冲突遵循 Pi 原有规则。选择 **More → Use manager only on next Pi start** 可在下次启动只加载管理器，不再导出预设资源。
 
 扩展不调用 `/reload`，不操作已加载的注册表，也不承诺立即卸载。发布后请完整重启，尤其是 extension 变化。你自行执行 `/reload` 属于 Pi 原生行为，不是管理器的事务恢复。
 
+## 导入已有 Pi 包
+
+将个人 Pi settings 里已经声明、已经安装的包导入管理器：
+
+1. 新建一个**空的**暂存 profile，例如 `mine`。
+2. 选择 **More → Import packages from current Pi**，在确认框核对来源 agent 目录。
+3. 核对导入的包和资源清单。管理器自身的 bundle 会被跳过。
+4. 验证后再切换：备份来源 `settings.json`，经明确确认后只移除其中已迁移的包声明，再按 **P → Use on next Pi start?** 发布 profile。保留管理器 bundle 声明和原始包目录。重启 Pi，确认 loaded profile。
+
+**导入只生成暂存副本，不会自动完成切换。** 不发布、不删除默认声明，也不改变当前 Pi。若保留原声明又加载发布副本，可能重复加载 extension，造成命令/工具冲突，甚至导致 Pi 无法启动；明确处理重复声明之前，不要启用发布副本。需要回退时，发布 manager-only、恢复备份中的原声明，再重启。
+
+导入将来源 agent 拥有的整个 `npm/`、`git/` 目录复制到新的包版本代，离线校验，不下载、不安装依赖、不执行 extension。导入期间请停止来源包的并发安装/更新。缺失的安装、外部 symlink、linked Git worktree 会被拒绝，不静默重装。保留包资源过滤器；相对本地包路径按原 settings 文件目录解析，仍是**外部引用**，不复制、修改或删除其文件。
+
+只导入包声明及 `npmCommand` / `httpProxy` 包管理配置，不复制凭证、会话、模型、用户指令、独立资源或项目配置。已有包历史的 profile 不能被覆盖导入，请新建空 profile。
+
+可选 CLI 等价操作（同样只写暂存区）：
+
+```bash
+node dist/index.js profile create mine
+node dist/index.js migrate mine --yes
+# 或明确指定已有 Pi agent 目录：
+# node dist/index.js migrate mine /path/to/agent --yes
+```
+
+默认来源依次为 `PI_MANAGER_SOURCE_AGENT_DIR`、`PI_CODING_AGENT_DIR`、`~/.pi/agent`。
+
 ## 预置上下文
 
-在 **Context files** 中创建或导入 Markdown，使用 Pi 自己的编辑器编辑副本。
+切到 **Context** 页签，按 **A** 创建或导入 Markdown；选中上下文后按 **E**，使用 Pi 自己的编辑器编辑副本。
 
 发布时，上下文内容与资源路径绑定到同一份启动快照。扩展通过公共 `before_agent_start` 事件中的独立 prompt section 追加这些内容；不覆盖 `AGENTS.md`、`CLAUDE.md`、`SYSTEM.md`、其他扩展的 section 或 Pi 整个系统提示词。
 
@@ -113,7 +141,7 @@ pi -e ./dist/extension.js
 4. 校验包文件、manifest、所有权和资源路径，不执行 extensions。
 5. 记录内容摘要，用单次原子替换暂存 `settings.json` 切换包路径和过滤器，保留上一代。
 
-提交前失败时，当前暂存引用和受管包文件保持不变。**Package generations / restore** 离线校验上一代摘要，再恢复包和过滤配置；之后仍需发布并重启 Pi，才会使用恢复的版本。
+提交前失败时，当前暂存引用和受管包文件保持不变。**More → Package generations / restore** 离线校验上一代摘要，再恢复包和过滤配置；之后仍需发布并重启 Pi，才会使用恢复的版本。
 
 恢复不覆盖上下文、独立资源、凭证、模型文件、会话或默认/项目配置。本地外部包只恢复**引用**，不恢复历史文件内容。旧代受管文件改变或丢失时拒绝恢复，不静默联网下载其他版本。
 
@@ -147,7 +175,7 @@ pi -e ./dist/extension.js
 
 **安装是“不改默认 Pi settings”的明确例外**：官方 `pi install` 增加本地管理器包声明。注册后的管理操作写自己的目录，不反复改默认 Pi settings。
 
-扩展不会自动导入默认 Pi 的资源，不改外部原文件、项目 `.pi`、父 shell 环境、Pi 源码/安装目录，也不复制凭证。npm/Git 缓存和第三方脚本仍可能在外部写入。
+扩展不会自动导入默认 Pi 的资源；明确执行的包导入对来源只读。不改外部原文件、项目 `.pi`、父 shell 环境、Pi 源码/安装目录，也不复制凭证。npm/Git 缓存和第三方脚本仍可能在外部写入。
 
 当前 Pi 继续使用它自己的登录和会话。旧 CLI 隔离 profile 中的凭证、会话不会自动被 Pi 内扩展采用或共享。旧启动器正在使用某个暂存目录时，管理器锁仍会拒绝修改；无法可靠检测外部手动启动的进程。
 
@@ -185,7 +213,7 @@ node dist/index.js package rollback review --yes
 
 ```bash
 npm pack --offline
-npm install --global ./pi-manager-0.5.0.tgz --offline --ignore-scripts --no-audit --no-fund
+npm install --global ./pi-manager-1.0.0.tgz --offline --ignore-scripts --no-audit --no-fund
 pi-manager install --yes
 ```
 
@@ -196,6 +224,7 @@ pi-manager install --yes
 | `PI_MANAGER_HOME` | 默认 `~/.pi-manager`，不可与默认 Pi 重叠；安装及启动 Pi 时使用相同值。 |
 | `PI_MANAGER_PI` | 安装器/旧 CLI 使用的 Pi 可执行文件，默认 `pi`。 |
 | `PI_MANAGER_SDK_PATH` | worker 使用的公共 Pi SDK 包目录/入口；默认自动检测。 |
+| `PI_MANAGER_SOURCE_AGENT_DIR` | 明确导入包时的可选来源 agent 目录；否则使用当前 Pi agent 或 `~/.pi/agent`。 |
 | `PI_MANAGER_EDITOR` | 仅供旧 CLI 外部编辑；Pi 内直接使用 Pi 编辑器。 |
 
 代理沿用进程环境，不改 npm registry 或 Pi proxy 配置。命令要求 agent 空闲，支持 Pi 交互 UI 或实现原生对话框的 RPC 客户端；print/JSON 模式不会打开管理器。打开、关闭管理器不调用模型。
@@ -211,9 +240,9 @@ npm test
 
 `src/` 和 `test/` 均为 TypeScript。NodeNext 的 `.js` 导入解析到 `.ts` 源码。`dist/`、`.test-dist/`、`node_modules/` 不提交 Git。
 
-`@earendil-works/pi-coding-agent`、`@earendil-works/pi-tui` 运行时由 Pi 提供，声明为可选 peer 和开发依赖，**不打包额外运行时副本**。分发包包含编译产物和两种 README。
+`@earendil-works/pi-coding-agent`、`@earendil-works/pi-tui` 运行时由 Pi 提供，声明为可选 peer 和开发依赖，**不打包额外运行时副本**。分发包包含编译产物、两种 README 和版本说明。
 
-测试覆盖命令注册、无 UI/忙碌/重复打开防护、原生对话框/编辑器、启动快照上下文、独立发布和失败发布、版本摘要恢复、symlink 与资源过滤。真实 Pi 集成在临时 agent 目录安装，检查 `/manager` 及导出的 extension、模板和 Skill 加载，并确认返回同一会话、不调用模型。真实 npm 测试使用 loopback registry，无需模型 API key。
+测试覆盖命令注册、无 UI/忙碌/重复打开防护、单页面板快捷键/搜索/选中项/缩放、发布状态比较、原生对话框/编辑器、只读包迁移和失败清理、启动快照上下文、独立发布和失败发布、版本摘要恢复、symlink 与资源过滤。真实 Pi 集成在临时 agent 目录安装，检查 `/manager` 及导出的 extension、模板和 Skill 加载，并确认返回同一会话、不调用模型。真实 npm 测试使用 loopback registry，无需模型 API key。
 
 ## 不做的功能
 

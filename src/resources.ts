@@ -4,9 +4,11 @@ import { join, basename, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { errorCode } from './errors.js';
-import type { ResourceType, WorkerSnapshot, Resource, ResourcePreview, Inventory } from './types.js';
+import type { ResourceType, WorkerSnapshot, Resource, ResourcePreview, Inventory, InventoryPackage } from './types.js';
 import { profileEnv, packageEntries } from './core.js';
-import { packageState } from './package-state.js';
+import { packageState, isRemoteSource } from './package-state.js';
+import { packageDisplayName } from './package-label.js';
+import { localPackageOrigin } from './local-git.js';
 import {
   RESOURCE_TYPES, assertProfile, getSettings, saveSettings, getMetadata, saveMetadata,
   validName, safePath, writeText, withProfileLock, isInside, assertContainedFile,
@@ -21,38 +23,52 @@ export function resourceId(type: ResourceType, path: string, source: string) {
   return createHash('sha256').update(`${type}\0${source}\0${path}`).digest('hex').slice(0, 12);
 }
 
-export async function inventory(profile: string): Promise<Inventory> {
+export async function inventory(profile: string, options: { signal?: AbortSignal } = {}): Promise<Inventory> {
+  options.signal?.throwIfAborted();
   const root = await assertProfile(profile);
   const settings = await getSettings(profile);
   const metadata = await getMetadata(profile);
+  options.signal?.throwIfAborted();
   const snapshot = await new Promise<WorkerSnapshot>((resolveInventory, reject) => {
-    let stdout = '', stderr = '';
+    let stdout = '', stderr = '', failure: Error | undefined;
     const child = spawn(process.execPath, [worker], {
       cwd: root, env: { ...profileEnv(profile), PI_OFFLINE: '1' },
-      stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000,
+      stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000, signal: options.signal,
     });
     child.stdout.on('data', chunk => { stdout += chunk; });
     child.stderr.on('data', chunk => { stderr += chunk; });
-    child.on('error', reject);
+    child.on('error', error => { failure = error; });
     child.on('close', code => {
+      if (failure) return reject(failure);
       if (code !== 0) return reject(new Error(`Resource discovery failed: ${stderr.trim()}`));
       try { resolveInventory(JSON.parse(stdout)); } catch { reject(new Error(`Invalid Pi inventory: ${stderr || stdout.slice(0, 200)}`)); }
     });
   });
+  options.signal?.throwIfAborted();
   const bindings = packageState(settings)?.bindings || {};
   const logicalSource = (source: string) => Object.entries(bindings).find(([, path]) => path === source)?.[0] || source;
-  const packages = packageEntries(settings, root, metadata).map(item => {
+  const packages: InventoryPackage[] = [];
+  for (const item of packageEntries(settings, root, metadata)) {
+    options.signal?.throwIfAborted();
     const installed = snapshot.packages.find(pkg => logicalSource(pkg.source) === item.source);
-    return { ...item, ...installed, source: item.source, enabled: item.enabled };
-  });
+    const origin = !isRemoteSource(item.source) && installed?.installedPath
+      ? await localPackageOrigin(installed.installedPath, options.signal) : undefined;
+    packages.push({ ...item, ...installed, source: item.source, enabled: item.enabled,
+      displayName: packageDisplayName(item.source, installed?.name, origin) });
+  }
+  options.signal?.throwIfAborted();
   const resources: Resource[] = [];
   for (const type of RESOURCE_TYPES) {
     for (const resource of snapshot.paths[type] || []) {
       const { path, enabled, metadata: sourceMeta } = resource;
       const origin = sourceMeta.origin === 'package' ? 'package' : 'standalone';
       const source = logicalSource(sourceMeta.source);
+      const name = basename(path) === 'SKILL.md' ? basename(dirname(path)) : basename(path);
+      const pkg = packages.find(item => item.source === source);
+      const entryPath = sourceMeta.packageRoot ? relative(sourceMeta.packageRoot, path).split('\\').join('/') || '.' : name;
+      const displayName = type === 'extensions' && origin === 'package' ? `${pkg?.displayName || packageDisplayName(source)} · ${entryPath}` : name;
       resources.push({
-        id: resourceId(type, path, source), type, path, name: basename(path) === 'SKILL.md' ? basename(dirname(path)) : basename(path),
+        id: resourceId(type, path, source), type, path, name, displayName,
         enabled, origin, source, packageRoot: sourceMeta.packageRoot,
         owned: origin === 'standalone' && isInside(join(root, 'resources', type), path),
       });
@@ -60,10 +76,10 @@ export async function inventory(profile: string): Promise<Inventory> {
   }
   for (const context of metadata.contexts || []) {
     const path = join(root, context.path);
-    resources.push({ id: resourceId('context', path, 'manager'), type: 'context', path, name: context.name,
+    resources.push({ id: resourceId('context', path, 'manager'), type: 'context', path, name: context.name, displayName: context.name,
       enabled: context.enabled, origin: 'standalone', source: 'manager', owned: true });
   }
-  return { profile, root, packages, resources: resources.sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name)) };
+  return { profile, root, packages, resources: resources.sort((a, b) => a.type.localeCompare(b.type) || a.displayName.localeCompare(b.displayName)) };
 }
 
 async function findResource(profile: string, id: string) {

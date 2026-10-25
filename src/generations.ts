@@ -128,13 +128,16 @@ export async function prepareGeneration(root: string, settings: PiSettings, meta
   } catch (error) { await rm(path, { recursive: true, force: true }); throw error; }
 }
 
-export async function generationDigest(path: string) {
+export async function generationDigest(path: string, signal?: AbortSignal) {
+  signal?.throwIfAborted();
   const hash = createHash('sha256');
   async function visit(directory: string): Promise<void> {
+    signal?.throwIfAborted();
     let entries;
     try { entries = await readdir(directory, { withFileTypes: true }); }
     catch (error) { if (errorCode(error) === 'ENOENT') { hash.update('missing:' + relative(path, directory)); return; } throw error; }
     for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name, 'en'))) {
+      signal?.throwIfAborted();
       const file = join(directory, entry.name);
       const stat = await lstat(file);
       hash.update(JSON.stringify([relative(path, file), stat.isSymbolicLink() ? 'link' : stat.isDirectory() ? 'dir' : 'file', stat.mode & 0o777]));
@@ -142,12 +145,13 @@ export async function generationDigest(path: string) {
       else if (stat.isDirectory()) await visit(file);
       else {
         const handle = await open(file, 'r');
-        try { for await (const chunk of handle.createReadStream({ autoClose: false })) hash.update(chunk); }
+        try { for await (const chunk of handle.createReadStream({ autoClose: false })) { signal?.throwIfAborted(); hash.update(chunk); } }
         finally { await handle.close(); }
       }
     }
   }
   for (const kind of ['npm', 'git']) await visit(join(path, kind));
+  signal?.throwIfAborted();
   return hash.digest('hex');
 }
 
