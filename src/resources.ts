@@ -23,6 +23,20 @@ export function resourceId(type: ResourceType, path: string, source: string) {
   return createHash('sha256').update(`${type}\0${source}\0${path}`).digest('hex').slice(0, 12);
 }
 
+/** Pi reports package resources as `origin: 'package'` and everything else as
+ * `top-level`. Among top-level entries, `source: 'auto'` marks files Pi found in
+ * user-level directories (for example ~/.agents/skills) that this preset never
+ * declared; those are listed read-only and never exported, because Pi discovers
+ * them on its own in every session.
+ */
+export function resourceOrigin(metadata: { origin: string; source: string }): Resource['origin'] {
+  if (metadata.origin === 'package') return 'package';
+  return metadata.source === 'auto' ? 'global' : 'standalone';
+}
+export function originLabel(origin: Resource['origin']): string {
+  return origin === 'global' ? 'user-level' : origin;
+}
+
 export async function inventory(profile: string, options: { signal?: AbortSignal } = {}): Promise<Inventory> {
   options.signal?.throwIfAborted();
   const root = await assertProfile(profile);
@@ -61,7 +75,7 @@ export async function inventory(profile: string, options: { signal?: AbortSignal
   for (const type of RESOURCE_TYPES) {
     for (const resource of snapshot.paths[type] || []) {
       const { path, enabled, metadata: sourceMeta } = resource;
-      const origin = sourceMeta.origin === 'package' ? 'package' : 'standalone';
+      const origin = resourceOrigin(sourceMeta);
       const source = logicalSource(sourceMeta.source);
       const name = basename(path) === 'SKILL.md' ? basename(dirname(path)) : basename(path);
       const pkg = packages.find(item => item.source === source);
@@ -111,6 +125,7 @@ export async function previewResource(profile: string, id: string): Promise<Reso
 export async function toggleResource(profile: string, id: string, enabled: boolean) {
   return withProfileLock(profile, async root => {
     const { resource } = await findResource(profile, id);
+    if (resource.origin === 'global') throw new Error('User-level resources are discovered by Pi itself and cannot be toggled from a staging preset.');
     if (resource.type === 'context') {
       const meta = await getMetadata(profile);
       const item = meta.contexts.find(item => join(root, item.path) === resource.path);

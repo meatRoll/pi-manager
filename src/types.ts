@@ -86,7 +86,9 @@ export interface Resource {
   /** Presentation only; never used for identity, file paths, or resource filters. */
   displayName: string;
   enabled: boolean;
-  origin: 'package' | 'standalone';
+  /** package: inside a configured package; standalone: declared by this preset;
+   * global: auto-discovered by Pi from the user's home, outside this preset. */
+  origin: 'package' | 'standalone' | 'global';
   source: string;
   packageRoot?: string;
   owned: boolean;

@@ -222,3 +222,20 @@ test('profile copy leaves credentials, sessions and installation files behind', 
   assert.equal((await resources.previewResource('copy', context.id)).text, 'Copy these instructions');
   await assert.rejects(readFile(join(core.profilePath('copy'), 'auth.json')), /ENOENT/);
 });
+
+test('resource origin separates package entries, preset declarations and user-level discoveries', async () => {
+  assert.equal(resources.resourceOrigin({ origin: 'package', source: '/any/package' }), 'package');
+  assert.equal(resources.resourceOrigin({ origin: 'top-level', source: 'local' }), 'standalone');
+  // Pi auto-discovers these from the user's home; a preset never declared them.
+  assert.equal(resources.resourceOrigin({ origin: 'top-level', source: 'auto' }), 'global');
+  assert.equal(resources.originLabel('global'), 'user-level');
+  assert.equal(resources.originLabel('package'), 'package');
+  assert.equal(resources.originLabel('standalone'), 'standalone');
+});
+
+test('user-level resources cannot be toggled from a preset', integration, async () => {
+  const state = await resources.inventory('toggles');
+  const userLevel = state.resources.find(resource => resource.origin === 'global');
+  if (!userLevel) return; // no ~/.agents or ~/.claude resources on this machine
+  await assert.rejects(resources.toggleResource('toggles', userLevel.id, false), /discovered by Pi itself/);
+});

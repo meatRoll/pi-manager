@@ -74,6 +74,8 @@ Space toggle · Enter preview · E edit · A add · P publish
 ←→ / Tab category · S switch preset · / search · Esc close
 ```
 
+The footer is contextual: it lists only the keys that currently do something. `E edit` / `Del delete` appear only on manager-owned rows, package rows advertise `Space toggle package · Enter package menu`, and `More` rows say `Enter run action`.
+
 - **Space** toggles the selected resource/package directly in staging. **Enter** previews a resource, or opens package actions. **E** edits an owned copy; **Del** deletes an owned copy after confirmation. External/package originals stay read-only.
 - **←→** or **Tab / Shift+Tab** changes category on the same screen. **/** searches (Enter finishes searching; Enter again opens). Each category keeps its selection and search after preview, editing, or toggling. **Esc** clears search first, then closes. Preview supports `↑↓` and `PgUp` / `PgDn`.
 - **A** adds to the current category; **P** publishes only after confirmation. **R** refreshes metadata after edits from another process. The terminal panel opens immediately; resource discovery and the full byte comparison run in the background. Rows become usable before that comparison finishes, and the header says **Checking publication…** until a result is known. It then marks unpublished changes or an unknown comparison instead of claiming the live session changed. Closing or switching cancels the read-only work. External local packages are references, not tracked historical copies.

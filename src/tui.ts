@@ -14,7 +14,7 @@ interface TuiEntry extends MenuEntry {
 }
 import { listProfiles, getState, createProfile, copyProfile, deleteProfile, setDefaultProfile, profilePath, runPi, run } from './core.js';
 import { packageOperation, inspectPackage, togglePackage, packageVersions, rollbackPackages } from './packages.js';
-import { inventory, previewResource, toggleResource, importResource, createContext, writeResource, removeResource, parseResourceType } from './resources.js';
+import { inventory, previewResource, toggleResource, importResource, createContext, writeResource, removeResource, parseResourceType, originLabel } from './resources.js';
 
 export async function editResource(profile: string, resource: Resource, ui?: Terminal) {
   const preview = await previewResource(profile, resource.id);
@@ -80,9 +80,9 @@ export async function openTui() {
   const resourcePage = async (profile: string, resource: Resource) => {
     const result = await ui.select(resource.displayName, [
       { label: 'Preview', value: 'preview' },
-      { label: resource.enabled ? 'Disable' : 'Enable', value: 'toggle' },
+      ...(resource.origin === 'global' ? [] : [{ label: resource.enabled ? 'Disable' : 'Enable', value: 'toggle' }]),
       ...(resource.owned ? [{ label: 'Edit with external editor', value: 'edit' }, { label: 'Delete owned copy', value: 'delete' }] : []),
-    ], `${resource.type} · ${resource.origin} · ${resource.owned ? 'manager-owned' : 'external read-only'}\n${resource.path}`);
+    ], `${resource.type} · ${originLabel(resource.origin)} · ${resource.owned ? 'manager-owned' : 'external read-only'}\n${resource.path}`);
     if (!result) return;
     await guard(async () => {
       if (result.entry.value === 'preview') {
@@ -102,7 +102,7 @@ export async function openTui() {
       const result = await ui.select<TuiEntry>(type || 'All resources', [
         { label: '+ Import local resource', value: 'import' },
         ...(type === 'context' ? [{ label: '+ Create context', value: 'create' }] : []),
-        ...entries.map(resource => ({ label: `[${resource.enabled ? 'x' : ' '}] ${resource.displayName}`, detail: `${resource.type} · ${resource.origin}${resource.owned ? ' · owned' : ''}`, resource, toggle: true })),
+        ...entries.map(resource => ({ label: `[${resource.enabled ? 'x' : ' '}] ${resource.displayName}`, detail: `${resource.type} · ${originLabel(resource.origin)}${resource.owned ? ' · owned' : ''}`, resource, toggle: resource.origin !== 'global' })),
       ], 'Space toggles next-launch enablement. Package/external originals are read-only.');
       if (!result) return;
       const resource = result.entry.resource;

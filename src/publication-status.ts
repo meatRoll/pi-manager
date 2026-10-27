@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { lstat, readdir, readFile, readlink, open } from 'node:fs/promises';
 import { join, relative } from 'node:path';
-import { BUNDLE_DIR } from './bundle.js';
+import { BUNDLE_DIR, exportableResources } from './bundle.js';
 import type { LoadedBundle } from './bundle.js';
 import { getSettings, getMetadata } from './core.js';
 import { absoluteEntries, generationDigest, generationPath } from './generations.js';
@@ -67,9 +67,12 @@ export function createPublicationInspector() {
         }
         return path;
       };
+      // Compare exactly what publication exports: user-level discoveries are
+      // never written to the snapshot, so they cannot make it look stale.
+      const exportable = exportableResources(current.resources);
       for (const type of RESOURCE_TYPES) {
         signal?.throwIfAborted();
-        const actual = current.resources.filter(resource => resource.type === type && resource.enabled).map(resource => rebase(resource.path)).sort();
+        const actual = exportable.filter(resource => resource.type === type).map(resource => rebase(resource.path)).sort();
         const expected = manifest.pi[type].filter(path => path !== join(snapshot, 'extension.mjs')).slice().sort();
         if (JSON.stringify(actual) !== JSON.stringify(expected)) return 'unpublished';
       }

@@ -89,3 +89,17 @@ test('busy staging profile cannot publish', async () => {
   await core.createProfile('locked');
   await core.withProfileLock('locked', async () => { await assert.rejects(publishBundle('locked'), /busy/); });
 });
+
+test('publication exports preset and package resources but never user-level discoveries', async () => {
+  const { exportableResources } = await import('../src/bundle.js');
+  const resource = (type: string, origin: string, enabled = true) => ({ type, origin, enabled, path: `/x/${type}-${origin}` });
+  const kept = exportableResources([
+    resource('extensions', 'package'),
+    resource('skills', 'standalone'),
+    resource('skills', 'global'),
+    resource('extensions', 'global'),
+    resource('prompts', 'standalone', false),
+    resource('context', 'standalone'),
+  ] as never);
+  assert.deepEqual(kept.map(item => `${item.type}:${item.origin}`), ['extensions:package', 'skills:standalone']);
+});

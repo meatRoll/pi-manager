@@ -9,7 +9,7 @@ import { packageState } from './package-state.js';
 import { getSettings, getMetadata } from './core.js';
 import { errorCode } from './errors.js';
 import { VERSION } from './version.js';
-import type { ResourceType } from './types.js';
+import type { PiResourceType, Resource, ResourceType } from './types.js';
 
 export const BUNDLE_DIR = join(MANAGER_HOME, 'pi-package');
 export interface LoadedBundle {
@@ -34,6 +34,17 @@ export async function publishedBundle(): Promise<LoadedBundle | null> {
     if (value.piManager?.format !== 1 || value.piManager.managerHome !== MANAGER_HOME) throw new Error('Invalid pi-manager export');
     return value.piManager;
   } catch (error) { if (errorCode(error) === 'ENOENT') return null; throw error; }
+}
+
+/** A snapshot carries resources this preset declares: package entries (copied or
+ * referenced) and files inside the preset. User-level resources that Pi
+ * auto-discovers from the home directory are deliberately excluded: Pi loads
+ * them itself in every session, so exporting them would only add a live path
+ * outside the snapshot that can silently go stale.
+ */
+export function exportableResources<T extends Pick<Resource, 'type' | 'enabled' | 'origin'>>(resources: T[]): (T & { type: PiResourceType })[] {
+  return resources.filter((resource): resource is T & { type: PiResourceType } =>
+    resource.enabled && resource.type !== 'context' && resource.origin !== 'global');
 }
 
 /** Publish a detached, immutable package snapshot for the next ordinary Pi start.
@@ -70,8 +81,7 @@ async function buildBundle(profile: string | null): Promise<LoadedBundle> {
         }
         return path;
       };
-      for (const resource of current.resources) {
-        if (!resource.enabled || resource.type === 'context') continue;
+      for (const resource of exportableResources(current.resources)) {
         paths[resource.type].push(rebase(resource.path));
       }
       for (const context of (await getMetadata(profile)).contexts.filter(item => item.enabled)) {

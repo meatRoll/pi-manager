@@ -2,7 +2,7 @@ import type { ExtensionCommandContext } from '@earendil-works/pi-coding-agent';
 import { readFile, readdir } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { listProfiles, createProfile, copyProfile, deleteProfile, profilePath, getState, setDefaultProfile, resolveSourcePath } from './core.js';
-import { inventory, importResource, previewResource, writeResource, removeResource, createContext, toggleResource } from './resources.js';
+import { inventory, importResource, previewResource, writeResource, removeResource, createContext, toggleResource, originLabel } from './resources.js';
 import { packageOperation, inspectPackage, togglePackage, packageVersions, rollbackPackages } from './packages.js';
 import { migratePiPackages, sourcePiAgentDir } from './migration.js';
 import { publishBundle, publishedBundle, BUNDLE_DIR } from './bundle.js';
@@ -59,8 +59,9 @@ export async function openManager(ctx: ExtensionCommandContext, loaded?: LoadedB
   const toggle = async (profile: string, resource: Resource) => mutate(async () => { await toggleResource(profile, resource.id, !resource.enabled); });
   // RPC lacks custom components and keyboard actions; keep an explicit dialog fallback.
   const resourceActions = async (profile: string, resource: Resource) => {
-    const action = await choose(ctx, `${resource.displayName} · ${resource.owned ? 'owned copy' : 'external / package read-only'}`, [
-      { label: 'Preview', value: 'preview' }, { label: resource.enabled ? 'Disable' : 'Enable', value: 'toggle' },
+    const action = await choose(ctx, `${resource.displayName} · ${resource.owned ? 'owned copy' : resource.origin === 'global' ? 'user-level read-only' : 'external / package read-only'}`, [
+      { label: 'Preview', value: 'preview' },
+      ...(resource.origin === 'global' ? [] : [{ label: resource.enabled ? 'Disable' : 'Enable', value: 'toggle' }]),
       ...(resource.owned ? [{ label: 'Edit in Pi', value: 'edit' }, { label: 'Delete owned copy', value: 'delete' }] : []),
     ]);
     if (action === 'preview') await preview(profile, resource);
@@ -193,8 +194,8 @@ export async function openManager(ctx: ExtensionCommandContext, loaded?: LoadedB
     if (needsRead) { current = undefined; status = 'checking'; }
     const resourceRows = (type?: ResourceType): DashboardEntry[] => (current?.resources || []).filter(resource => !type || resource.type === type).map(resource => ({
       id: `resource:${resource.id}`, label: `[${resource.enabled ? 'x' : ' '}] ${resource.displayName}`,
-      detail: `${resource.type} · ${resource.origin}${resource.owned ? ' · owned' : ' · read-only'}`,
-      toggle: true, editable: resource.owned, deletable: resource.owned,
+      detail: `${resource.type} · ${originLabel(resource.origin)}${resource.owned ? ' · owned' : ' · read-only'}`,
+      toggle: resource.origin !== 'global', editable: resource.owned, deletable: resource.owned,
     }));
     const makeModel = (): DashboardModel => ({
       profile: profile!, loading: `loaded: ${loaded?.profile || 'manager only'} · next start: ${published?.profile || 'manager only'}`,

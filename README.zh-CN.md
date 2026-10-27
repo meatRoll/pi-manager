@@ -74,6 +74,8 @@ Space toggle · Enter preview · E edit · A add · P publish
 ←→ / Tab category · S switch preset · / search · Esc close
 ```
 
+底部提示是**上下文相关**的：只列出当前分类与当前选中行真正可用的键。`E edit` / `Del delete` 只在 manager 拥有的副本上出现；包的行显示 `Space toggle package · Enter package menu`；`More` 分类的行显示 `Enter run action`。
+
 - **空格**直接启停所选资源/包，只改暂存。**Enter**直接预览资源，选中包则打开操作菜单。**E** 编辑管理器副本；**Del** 确认后删除副本。外部/包内原文件仍只读。
 - **←→** 或 **Tab / Shift+Tab** 在同一页切换分类。**/** 搜索（Enter 结束输入，再按一次打开）；每个分类在预览、编辑、启停后保留选中项和搜索条件。**Esc** 先清空搜索，再退出。预览支持 `↑↓`、`PgUp` / `PgDn`。
 - **A** 向当前分类添加；**P** 确认后发布。其他进程修改后按 **R** 刷新。终端面板先显示，资源发现与完整内容比较放在后台；资源列表先可操作，检查结束前标题显示 **Checking publication…**，之后再提示未发布修改或无法确定的状态，不冒充当前会话已生效。关闭或切换会取消只读检查。本地外部包只是引用，不追踪历史副本。
