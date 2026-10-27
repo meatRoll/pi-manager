@@ -94,7 +94,7 @@ test('import six declarations offline, preserve filters and originals, skip mana
   await publishBundle('mine');
   const manifest = JSON.parse(await readFile(join(BUNDLE_DIR, 'package.json'), 'utf8'));
   assert.equal(manifest.piManager.profile, 'mine');
-  assert.equal(manifest.pi.extensions.length, 7);
+  assert.equal(manifest.pi.extensions.length, 6);
   assert.ok(manifest.pi.extensions.includes(join(external, 'index.js')));
   assert.ok(manifest.pi.extensions.includes(join(BUNDLE_DIR, '.snapshots', manifest.piManager.id, 'npm/node_modules/one/index.js')));
   // Source, candidate and publication never share hardlinks or writable files.

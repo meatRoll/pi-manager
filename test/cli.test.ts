@@ -139,3 +139,16 @@ test('terminal strips control sequences from package/log content', () => {
   assert.equal(plain('\x1b[2JHello\x1b]0;malicious\x07'), 'Hello');
   assert.equal(clip('中文abc', 5), '中文a');
 });
+
+test('installer recognises an existing manager package declaration before adding one', async () => {
+  const { hasManagerPackage } = await import('../src/install-pi.js');
+  const agent = join(temp, 'agent-settings'); await mkdir(agent, { recursive: true });
+  await writeFile(join(agent, 'settings.json'), JSON.stringify({ packages: ['../manager/pi-package'] }));
+  assert.equal(await hasManagerPackage(agent), false);
+  await writeFile(join(agent, 'settings.json'), JSON.stringify({ packages: ['git:github.com/meatRoll/pi-manager', '../manager/pi-package'] }));
+  assert.equal(await hasManagerPackage(agent), true);
+  await writeFile(join(agent, 'settings.json'), JSON.stringify({ packages: [{ source: 'git:https://github.com/meatRoll/pi-manager.git' }] }));
+  assert.equal(await hasManagerPackage(agent), true);
+  await writeFile(join(agent, 'settings.json'), 'not json');
+  assert.equal(await hasManagerPackage(agent), false);
+});

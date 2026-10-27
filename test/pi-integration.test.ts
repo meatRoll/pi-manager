@@ -1,7 +1,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, realpath, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
@@ -39,11 +39,18 @@ test('official install loads a snapshot into real Pi; /manager returns to that s
   const settings = await core.getSettings('preset');
   settings.skills = ['resources/skills/example']; settings.prompts = ['resources/prompts/example.md']; settings.extensions = ['resources/extensions/example.js'];
   await core.saveSettings('preset', settings); await publishBundle('preset');
-  const env = { ...process.env, PI_CODING_AGENT_DIR: agent, PI_CODING_AGENT_SESSION_DIR: join(agent, 'sessions'), PI_OFFLINE: '1', PI_SKIP_VERSION_CHECK: '1', PI_TELEMETRY: '0' };
+  // The installer registers the manager as its own Pi package; point that at
+  // this checkout so the test never reaches the network.
+  const repo = fileURLToPath(new URL('../..', import.meta.url));
+  const env = { ...process.env, PI_MANAGER_SELF_SOURCE: repo, PI_CODING_AGENT_DIR: agent, PI_CODING_AGENT_SESSION_DIR: join(agent, 'sessions'), PI_OFFLINE: '1', PI_SKIP_VERSION_CHECK: '1', PI_TELEMETRY: '0' };
   const installed = spawnSync(process.execPath, [fileURLToPath(new URL('../src/install-pi.js', import.meta.url)), '--yes'], { cwd: project, env, encoding: 'utf8', timeout: 30000 });
   assert.equal(installed.status, 0, installed.stderr + installed.stdout);
   const configured = JSON.parse(await readFile(join(agent, 'settings.json'), 'utf8')) as { packages: string[] };
-  assert.equal(configured.packages.length, 1);
+  // Pi stores local declarations relative to the agent directory.
+  const resolvedPackages = await Promise.all(configured.packages.map(item => realpath(resolve(agent, item))));
+  assert.equal(resolvedPackages.length, 2);
+  assert.ok(resolvedPackages.includes(await realpath(repo)), resolvedPackages.join(', '));
+  assert.ok(resolvedPackages.some(item => item.includes('pi-package')));
   const child = spawn(cli, ['--mode', 'rpc', '--no-session', '--offline', '--no-approve'], { cwd: project, env, stdio: ['pipe', 'pipe', 'pipe'] });
   const records: RecordMessage[] = [];
   let buffered = '', stderr = '';

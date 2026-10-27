@@ -1,9 +1,9 @@
+import { readFileSync } from 'node:fs';
 import { mkdir, readFile, rm, realpath } from 'node:fs/promises';
 import { join, relative } from 'node:path';
-import { pathToFileURL, fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { inventory } from './resources.js';
-import { assertProfile, ensureManagerHome, withProfileLock, MANAGER_HOME, RESOURCE_TYPES, safePath, writeJson, writeText, readJson, isInside } from './storage.js';
+import { assertProfile, ensureManagerHome, withProfileLock, MANAGER_HOME, RESOURCE_TYPES, safePath, writeJson, readJson, isInside } from './storage.js';
 import { copyOwnedTree, generationPath, absoluteEntries, runPackageWorker } from './generations.js';
 import { packageState } from './package-state.js';
 import { getSettings, getMetadata } from './core.js';
@@ -26,6 +26,16 @@ interface BundleManifest {
   type: 'module';
   pi: Record<Exclude<ResourceType, 'context'>, string[]>;
   piManager: LoadedBundle;
+}
+
+/** Startup binding for the manager package itself. Any unreadable or malformed
+ * export means "no published preset yet"; the manager can still run and publish.
+ */
+export function publishedBundleSync(): LoadedBundle | null {
+  try {
+    const value = JSON.parse(readFileSync(join(BUNDLE_DIR, 'package.json'), 'utf8')) as BundleManifest;
+    return value.piManager?.format === 1 && value.piManager.managerHome === MANAGER_HOME ? value.piManager : null;
+  } catch { return null; }
 }
 
 export async function publishedBundle(): Promise<LoadedBundle | null> {
@@ -91,12 +101,9 @@ async function buildBundle(profile: string | null): Promise<LoadedBundle> {
         loaded.contexts.push({ name: context.name, content: await readFile(path, 'utf8') });
       }
     }
-    const entry = join(root, 'extension.mjs');
-    // An entry unique to each snapshot binds context and paths from the same
-    // publication. Never read a newer selection into an already running Pi.
-    const implementation = pathToFileURL(fileURLToPath(new URL('./extension.js', import.meta.url))).href;
-    await writeText(entry, `import manager from ${JSON.stringify(implementation)};\nexport default function(pi) { return manager(pi, ${JSON.stringify(loaded)}); }\n`);
-    paths.extensions.unshift(entry);
+    // The manager itself is installed as its own Pi package, so the snapshot
+    // carries resources only. `piManager` below is the binding the manager reads
+    // at startup (profile, manager home, published context).
     for (const type of RESOURCE_TYPES) paths[type] = [...new Set(paths[type])];
     const manifest: BundleManifest = { name: 'pi-manager-local-bundle', version: VERSION, private: true, type: 'module', pi: paths, piManager: loaded };
     // Atomic commit point. Nothing that can fail/deletes files follows it.

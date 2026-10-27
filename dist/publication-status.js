@@ -88,7 +88,7 @@ export function createPublicationInspector() {
             for (const type of RESOURCE_TYPES) {
                 signal?.throwIfAborted();
                 const actual = exportable.filter(resource => resource.type === type).map(resource => rebase(resource.path)).sort();
-                const expected = manifest.pi[type].filter(path => path !== join(snapshot, 'extension.mjs')).slice().sort();
+                const expected = manifest.pi[type].slice().sort();
                 if (JSON.stringify(actual) !== JSON.stringify(expected))
                     return 'unpublished';
             }

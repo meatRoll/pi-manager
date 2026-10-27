@@ -1,4 +1,4 @@
-import { realpath, rm } from 'node:fs/promises';
+import { readFile, realpath, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { BUNDLE_DIR } from './bundle.js';
@@ -15,6 +15,18 @@ function normalizeEntry(entry, sourceAgentDir) {
     // Pi also accepts bare relative paths (e.g. "my-package"). Resolve every
     // local declaration from its original settings file, never the candidate.
     return withSource(entry, isRemoteSource(source) ? source : resolve(sourceAgentDir, source));
+}
+/** The manager installs itself as its own package; importing it would load a
+ * second /manager next to the one already running.
+ */
+async function isManagerPackage(source) {
+    try {
+        const manifest = JSON.parse(await readFile(join(source, 'package.json'), 'utf8'));
+        return manifest.name === 'pi-manager';
+    }
+    catch {
+        return false;
+    }
 }
 async function isManagerBundle(source) {
     if (isRemoteSource(source))
@@ -53,7 +65,7 @@ export async function migratePiPackages(profile, sourceAgentDir = sourcePiAgentD
         for (const entry of sourceSettings.packages || []) {
             const normalized = normalizeEntry(entry, sourceRoot);
             const source = sourceOf(normalized);
-            if (await isManagerBundle(source)) {
+            if (await isManagerBundle(source) || await isManagerPackage(source)) {
                 skipped.push(sourceOf(entry));
                 continue;
             }

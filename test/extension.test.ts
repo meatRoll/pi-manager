@@ -210,3 +210,31 @@ test('duplicate manager commands and manager-home mismatch are rejected', async 
   const bad = harness(); extension(bad.pi, { format: 1, id: 'other', profile: null, managerHome: '/wrong/home', contexts: [] });
   await bad.run(); assert.match(bad.notes.pop()!, /differs/);
 });
+
+test('without a generated entry the manager reads its own published binding once', async () => {
+  await core.createProfile('bound');
+  const { createContext, publishBundle } = { createContext: (await import('../src/resources.js')).createContext, publishBundle: (await import('../src/bundle.js')).publishBundle };
+  await createContext('bound', 'rules', 'Published context content');
+  const published = await publishBundle('bound');
+  const h = harness();
+  extension(h.pi); // no loaded argument: the manager package resolves it itself
+  const statuses: string[] = [];
+  h.ctx.ui.setStatus = (_key: string, text: string) => { statuses.push(text); };
+  const start = h.handlers.get('session_start'); assert.ok(start); await start({}, h.ctx);
+  assert.match(statuses.pop()!, new RegExp(`manager:bound`));
+  const options: NormalizedBuildSystemPromptOptions = { cwd: temp, sections: {}, selectedTools: [], hiddenTools: [], toolSnippets: {}, toolGuidelines: {}, promptGuidelines: [], appendSystemPrompt: '', contextFiles: [], skills: [] };
+  const event = { systemPromptOptions: options } as BeforeAgentStartEvent;
+  const handler = h.handlers.get('before_agent_start'); assert.ok(handler); await handler(event, h.ctx);
+  assert.match(event.systemPromptOptions.sections.pi_manager_context, /Published context content/);
+  // A later publication must not leak into this session.
+  const resources = await import('../src/resources.js');
+  const context = (await resources.inventory('bound')).resources.find(item => item.type === 'context');
+  assert.ok(context);
+  await resources.writeResource('bound', context.id, 'Edited after startup');
+  await publishBundle('bound');
+  const again = { systemPromptOptions: { ...options, sections: {} } } as BeforeAgentStartEvent;
+  await handler(again, h.ctx);
+  assert.match(again.systemPromptOptions.sections.pi_manager_context, /Published context content/);
+  assert.ok(!again.systemPromptOptions.sections.pi_manager_context.includes('Edited after startup'));
+  assert.equal(published.profile, 'bound');
+});

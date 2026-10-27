@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, realpath, mkdir, writeFile, readFile, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, realpath, mkdir, writeFile, readFile, readdir, rm, symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { findPiSdk } from '../src/pi-sdk.js';
@@ -14,17 +14,18 @@ let sdk: string | undefined; try { sdk = findPiSdk(); } catch {}
 const integration = sdk ? {} : { skip: 'Pi SDK required' };
 after(() => rm(temp, { recursive: true, force: true }));
 
-test('manager-only bundle has one extension entry, no factory side effects or runtime credentials', async () => {
+test('manager-only bundle carries resources and the binding, never a manager entry or credentials', async () => {
   const result = await publishBundle(null);
   const manifest = JSON.parse(await readFile(join(BUNDLE_DIR, 'package.json'), 'utf8'));
-  assert.equal(manifest.pi.extensions.length, 1);
+  // The manager is its own Pi package; a generated entry would register
+  // /manager twice and pin the snapshot to one implementation path.
+  assert.deepEqual(manifest.pi.extensions, []);
   assert.deepEqual(manifest.pi.skills, []);
   assert.deepEqual(manifest.piManager, result);
   assert.equal((await publishedBundle())?.profile, null);
-  const wrapper = await readFile(manifest.pi.extensions[0], 'utf8');
-  assert.match(wrapper, /export default function/);
-  assert.match(wrapper, /extension\.js/);
-  assert.ok(!wrapper.includes('auth.json'));
+  assert.equal(await readdir(join(BUNDLE_DIR, '.snapshots', result.id)).then(names => names.includes('extension.mjs')), false);
+  const manifestText = await readFile(join(BUNDLE_DIR, 'package.json'), 'utf8');
+  assert.ok(!manifestText.includes('auth.json'));
 });
 
 test('published resources and context are detached from staging edits and deletion', integration, async () => {
