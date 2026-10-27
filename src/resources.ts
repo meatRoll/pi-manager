@@ -127,7 +127,7 @@ export async function toggleResource(profile: string, id: string, enabled: boole
       if (index < 0) throw new Error('Package source is no longer configured');
       const old = entries[index];
       const entry = typeof old === 'string' ? { source: old } : { ...old };
-      if (Object.hasOwn((await getMetadata(profile)).disabledPackages || {}, entry.source)) throw new Error('Enable the package before editing its resources');
+      if (Object.hasOwn((await getMetadata(profile)).disabledPackages || {}, entry.source)) throw new Error(`Package is disabled: ${resource.source}. Enable the package first (Packages tab), then toggle this resource.`);
       patterns = [...entry[resource.type] || []];
       // [] means none, unlike an absent filter. Retain that selection when
       // enabling a single file rather than accidentally enabling its siblings.

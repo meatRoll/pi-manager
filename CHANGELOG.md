@@ -5,6 +5,7 @@
 ### Fixes
 
 - The dashboard footer is now contextual: it only lists shortcuts that apply to the current category and selected row. Package rows advertise their own menu, `More` rows run actions, and `E edit` / `Del delete` appear only for manager-owned copies instead of on every screen.
+- Toggling a resource that belongs to a disabled package now explains that the package must be enabled first (Packages tab) instead of the misleading "Enable the package before editing its resources".
 
 ## v1.0.0 — First stable release
 
