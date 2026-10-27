@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## v1.1.0 — Honest dashboard and self-contained publications
+
+Keyboard hints now follow the selected category and row, disabled-package errors say what to do,
+publication snapshots no longer reference user-level resources that Pi loads on its own, and the
+SDK lookup understands wrapper installations.
 
 ### Fixes
 
