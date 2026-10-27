@@ -49,7 +49,7 @@ Primary interface: type /manager INSIDE Pi. This CLI is optional/legacy.
 
 Types: skills, extensions, prompts, themes, context
 State: ${MANAGER_HOME}
-Environment: PI_MANAGER_HOME, PI_MANAGER_PI, PI_MANAGER_SDK_PATH, PI_MANAGER_EDITOR
+Environment: PI_MANAGER_HOME, PI_MANAGER_PUBLISH_DIR, PI_MANAGER_PI, PI_MANAGER_SDK_PATH, PI_MANAGER_EDITOR
 
 Changes apply next launch. No live unload or mutation of the default Pi/project config.
 --yes acknowledges package code/install-script execution or destructive deletion.

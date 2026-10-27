@@ -15,6 +15,11 @@ function canonicalLocation(path: string) {
 }
 export const MANAGER_HOME = canonicalLocation(process.env.PI_MANAGER_HOME || join(homedir(), '.pi-manager'));
 export const PROFILES_DIR = join(MANAGER_HOME, 'profiles');
+/** Published snapshots. Separately redirectable because every publication copies
+ * hundreds of megabytes and only the newest one is live; keep profiles where they
+ * are and move this to a larger disk with PI_MANAGER_PUBLISH_DIR.
+ */
+export const PUBLISH_DIR = canonicalLocation(process.env.PI_MANAGER_PUBLISH_DIR || join(MANAGER_HOME, 'pi-package'));
 export const RESOURCE_TYPES = ['extensions', 'skills', 'prompts', 'themes'] as const;
 
 export function validName(name: string) {
@@ -40,7 +45,8 @@ export async function readJson<T>(path: string, fallback?: T): Promise<T> {
 // not an OS security boundary against hostile concurrent filesystem mutations.
 export async function safePath(path: string) {
   const absolute = resolve(path);
-  if (!isInside(MANAGER_HOME, absolute)) throw new Error(`Write outside manager home refused: ${path}`);
+  const writable = isInside(MANAGER_HOME, absolute) || isInside(PUBLISH_DIR, absolute);
+  if (!writable) throw new Error(`Write outside manager home refused: ${path}`);
   for (let cursor = absolute; ; cursor = dirname(cursor)) {
     try {
       const stat = await lstat(cursor);
@@ -64,6 +70,12 @@ export async function ensureManagerHome() {
   const normalPi = resolve(homedir(), '.pi');
   if (isInside(normalPi, MANAGER_HOME) || isInside(MANAGER_HOME, normalPi)) {
     throw new Error('PI_MANAGER_HOME must not overlap ~/.pi.');
+  }
+  if (isInside(normalPi, PUBLISH_DIR) || isInside(PUBLISH_DIR, normalPi)) {
+    throw new Error('PI_MANAGER_PUBLISH_DIR must not overlap ~/.pi.');
+  }
+  if (isInside(PROFILES_DIR, PUBLISH_DIR) || isInside(PUBLISH_DIR, PROFILES_DIR) || PUBLISH_DIR === MANAGER_HOME) {
+    throw new Error('PI_MANAGER_PUBLISH_DIR must be its own directory outside the profiles.');
   }
   if (process.env.PI_CODING_AGENT_DIR) {
     const agent = resolve(process.env.PI_CODING_AGENT_DIR);

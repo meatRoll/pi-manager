@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, realpath } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { inventory } from './resources.js';
-import { assertProfile, ensureManagerHome, withProfileLock, MANAGER_HOME, RESOURCE_TYPES, safePath, writeJson, readJson, isInside } from './storage.js';
+import { assertProfile, ensureManagerHome, withProfileLock, MANAGER_HOME, PUBLISH_DIR, RESOURCE_TYPES, safePath, writeJson, readJson, isInside } from './storage.js';
 import { copyOwnedTree, generationPath, absoluteEntries, runPackageWorker } from './generations.js';
 import { packageState } from './package-state.js';
 import { getSettings, getMetadata } from './core.js';
@@ -11,7 +11,7 @@ import { errorCode } from './errors.js';
 import { VERSION } from './version.js';
 import type { PiResourceType, Resource, ResourceType } from './types.js';
 
-export const BUNDLE_DIR = join(MANAGER_HOME, 'pi-package');
+export const BUNDLE_DIR = PUBLISH_DIR;
 export interface LoadedBundle {
   format: 1;
   id: string;

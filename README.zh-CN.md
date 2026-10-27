@@ -46,6 +46,18 @@ pi
 
 安装后 `npm start` 只是启动普通 `pi`。源码目录之后可以删除：注册的管理器包是 Pi 自己管理的 Git 安装，已发布预设是自包含快照。
 
+### 把已发布快照放到另一块盘
+
+每次发布都会复制几百 MB，而只有最新一份是活的。可以只重定向发布目录，profiles 留在原处：
+
+```bash
+export PI_MANAGER_PUBLISH_DIR=/Volumes/big-disk/pi-manager-packages   # 写进 shell 配置
+node dist/index.js install --yes     # 发布到新位置并注册新路径
+pi remove ../../.pi-manager/pi-package   # 删掉它报告的旧声明
+```
+
+`install --yes` 会打印需要删除的旧 `pi-package` 声明。写入范围被限制在 manager home 加这个目录内，且不得与 `~/.pi`、manager home 或 `profiles/` 重叠。
+
 ### 更新
 
 ```bash

@@ -46,6 +46,18 @@ Then type **inside Pi**:
 
 `npm start` simply starts normal `pi` after installation. The checkout can be deleted afterwards: the registered manager package is a Git installation owned by Pi, and the published preset is a self-contained snapshot.
 
+### Move published snapshots to another disk
+
+Each publication copies hundreds of megabytes, and only the newest snapshot is live. Keep profiles where they are and redirect just the publication directory:
+
+```bash
+export PI_MANAGER_PUBLISH_DIR=/Volumes/big-disk/pi-manager-packages   # in your shell profile
+node dist/index.js install --yes     # publishes there and registers the new path
+pi remove ../../.pi-manager/pi-package   # drop the superseded declaration it reports
+```
+
+`install --yes` prints the exact `pi remove` line for stale `pi-package` declarations. Writes stay confined to the manager home plus this directory, and it may not overlap `~/.pi`, the manager home, or `profiles/`.
+
 ### Update
 
 ```bash

@@ -24,6 +24,26 @@ export async function hasManagerPackage(agentDir = sourcePiAgentDir()) {
         return false;
     }
 }
+/** Declarations that point at a previous publication directory, e.g. after
+ * PI_MANAGER_PUBLISH_DIR moved. Pi only loads the newest registered path.
+ */
+export async function staleBundleDeclarations(agentDir = sourcePiAgentDir()) {
+    try {
+        const settings = JSON.parse(await readFile(join(agentDir, 'settings.json'), 'utf8'));
+        const stale = [];
+        for (const entry of settings.packages || []) {
+            const source = typeof entry === 'string' ? entry : entry?.source;
+            if (typeof source !== 'string' || !/(?:^|\/)pi-package$/.test(source))
+                continue;
+            if (resolve(agentDir, source) !== BUNDLE_DIR)
+                stale.push(source);
+        }
+        return stale;
+    }
+    catch {
+        return [];
+    }
+}
 export async function installPiExtension(acknowledged = false) {
     if (!acknowledged)
         throw new Error('Pass --yes to register pi-manager in the current Pi agent settings. No other resources, credentials or sessions are copied.');
@@ -45,8 +65,10 @@ export async function installPiExtension(acknowledged = false) {
     if (code !== 0)
         throw new Error(`pi install exited ${code}`);
     registered.push(BUNDLE_DIR);
+    const stale = await staleBundleDeclarations();
     console.log([
         `Registered Pi packages: ${registered.join(', ')}`,
+        ...(stale.length ? [`Remove the superseded declaration${stale.length > 1 ? 's' : ''}: pi remove ${stale.join(' ')}`] : []),
         registered.some(item => item === BUNDLE_DIR) ? `Published resources stay in ${BUNDLE_DIR}; update the manager with "pi update".` : '',
         'Restart Pi, then type /manager. No separate pi-manager process is needed.',
     ].filter(Boolean).join('\n'));

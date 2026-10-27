@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.3.1 — Published snapshots can live on another disk
+
+### Features
+
+- `PI_MANAGER_PUBLISH_DIR` moves only the publication directory (about 440 MB per publish) while profiles stay in the manager home. Writes stay confined to the manager home plus that directory, and the path may not overlap `~/.pi`, the profiles directory, or the manager home itself.
+- `install --yes` reports superseded `pi-package` declarations so a moved publication directory can be re-registered with `pi remove` + `install --yes` instead of silently loading two bundles.
+
 ## v1.3.0 — The manager installs as its own package
 
 `pi update` can update the manager itself again, and a published snapshot no longer pins one checkout path.
