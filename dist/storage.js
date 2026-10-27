@@ -2,10 +2,10 @@ import { mkdir, readFile, writeFile, rename, rm, lstat, readdir, realpath, open 
 import { homedir } from 'node:os';
 import { dirname, join, resolve, relative, isAbsolute } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { realpathSync, existsSync } from 'node:fs';
+import { realpathSync, existsSync, readFileSync } from 'node:fs';
 import { logicalSettings, physicalSettings, packageState } from './package-state.js';
 import { errorCode } from './errors.js';
-function canonicalLocation(path) {
+export function canonicalLocation(path) {
     const absolute = resolve(path);
     let ancestor = absolute;
     while (!existsSync(ancestor) && dirname(ancestor) !== ancestor)
@@ -14,11 +14,22 @@ function canonicalLocation(path) {
 }
 export const MANAGER_HOME = canonicalLocation(process.env.PI_MANAGER_HOME || join(homedir(), '.pi-manager'));
 export const PROFILES_DIR = join(MANAGER_HOME, 'profiles');
-/** Published snapshots. Separately redirectable because every publication copies
- * hundreds of megabytes and only the newest one is live; keep profiles where they
- * are and move this to a larger disk with PI_MANAGER_PUBLISH_DIR.
- */
-export const PUBLISH_DIR = canonicalLocation(process.env.PI_MANAGER_PUBLISH_DIR || join(MANAGER_HOME, 'pi-package'));
+function configuredPublishDir() {
+    const fromEnv = process.env.PI_MANAGER_PUBLISH_DIR;
+    if (fromEnv)
+        return { value: fromEnv, source: 'env' };
+    try {
+        const state = JSON.parse(readFileSync(join(MANAGER_HOME, 'state.json'), 'utf8'));
+        if (typeof state.publishDir === 'string' && state.publishDir.trim() && isAbsolute(state.publishDir)) {
+            return { value: state.publishDir, source: 'state' };
+        }
+    }
+    catch { /* Unreadable or invalid state never prevents the manager from loading. */ }
+    return { source: 'default' };
+}
+const configuredPublish = configuredPublishDir();
+export const PUBLISH_DIR_SOURCE = configuredPublish.source;
+export const PUBLISH_DIR = canonicalLocation(configuredPublish.value || join(MANAGER_HOME, 'pi-package'));
 export const RESOURCE_TYPES = ['extensions', 'skills', 'prompts', 'themes'];
 export function validName(name) {
     if (typeof name !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(name)) {
@@ -78,17 +89,25 @@ export async function writeText(path, text) {
     }
 }
 export async function writeJson(path, value) { await writeText(path, `${JSON.stringify(value, null, 2)}\n`); }
+/** The publish directory may not shadow Pi's own agent directory, the profiles it
+ * publishes from, or the manager home itself. Shared by startup guards and by
+ * "config publish-dir" so a stored value is validated with the same rules.
+ */
+export function validatePublishDir(directory = PUBLISH_DIR) {
+    const normalPi = resolve(homedir(), '.pi');
+    if (isInside(normalPi, directory) || isInside(directory, normalPi)) {
+        throw new Error('The publish directory must not overlap ~/.pi.');
+    }
+    if (isInside(PROFILES_DIR, directory) || isInside(directory, PROFILES_DIR) || directory === MANAGER_HOME) {
+        throw new Error('The publish directory must be its own directory outside the profiles.');
+    }
+}
 export async function ensureManagerHome() {
     const normalPi = resolve(homedir(), '.pi');
     if (isInside(normalPi, MANAGER_HOME) || isInside(MANAGER_HOME, normalPi)) {
         throw new Error('PI_MANAGER_HOME must not overlap ~/.pi.');
     }
-    if (isInside(normalPi, PUBLISH_DIR) || isInside(PUBLISH_DIR, normalPi)) {
-        throw new Error('PI_MANAGER_PUBLISH_DIR must not overlap ~/.pi.');
-    }
-    if (isInside(PROFILES_DIR, PUBLISH_DIR) || isInside(PUBLISH_DIR, PROFILES_DIR) || PUBLISH_DIR === MANAGER_HOME) {
-        throw new Error('PI_MANAGER_PUBLISH_DIR must be its own directory outside the profiles.');
-    }
+    validatePublishDir();
     if (process.env.PI_CODING_AGENT_DIR) {
         const agent = resolve(process.env.PI_CODING_AGENT_DIR);
         if (!isInside(PROFILES_DIR, agent) && (isInside(agent, MANAGER_HOME) || isInside(MANAGER_HOME, agent))) {
@@ -122,6 +141,31 @@ export async function getMetadata(name) {
 }
 export async function saveMetadata(name, metadata) { await writeJson(join(await assertProfile(name), 'manager.json'), metadata); }
 export async function getState() { return readJson(join(MANAGER_HOME, 'state.json'), { defaultProfile: null }); }
+/** Persist the publish directory for launches that have no environment variable.
+ * An exported PI_MANAGER_PUBLISH_DIR would silently win, so require it unset.
+ */
+export async function setPublishDir(value) {
+    if (process.env.PI_MANAGER_PUBLISH_DIR) {
+        throw new Error('PI_MANAGER_PUBLISH_DIR is set and overrides stored state. Unset it before changing the saved publish directory.');
+    }
+    const directory = value === null ? null : canonicalLocation(value);
+    if (directory)
+        validatePublishDir(directory);
+    await writeJson(join(MANAGER_HOME, 'state.json'), { ...await getState(), publishDir: directory ?? undefined });
+    return directory;
+}
+/** Remember an explicitly exported publish directory so later launches without the
+ * variable keep publishing to the same place. Returns the stored path when it changed.
+ */
+export async function rememberPublishDir() {
+    if (PUBLISH_DIR_SOURCE !== 'env')
+        return null;
+    const state = await getState();
+    if (state.publishDir && canonicalLocation(state.publishDir) === PUBLISH_DIR)
+        return null;
+    await writeJson(join(MANAGER_HOME, 'state.json'), { ...state, publishDir: PUBLISH_DIR });
+    return PUBLISH_DIR;
+}
 export async function setDefaultProfile(name) {
     if (name !== null)
         await assertProfile(name);

@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.3.2 — The publish directory is remembered
+
+v1.3.1 could only redirect publications through an environment variable, so any
+launch without it (an app, launchd, an older shell) still read the default path.
+
+### Features
+
+- `pi-manager config publish-dir <path>` saves the publish directory in `state.json`. Precedence is `PI_MANAGER_PUBLISH_DIR`, then saved state, then `<manager home>/pi-package`; `install --yes` saves an exported value and `config publish-dir --unset` returns to the default.
+- `pi-manager config` reports the effective layout, where the publish directory came from, whether Pi is registered to load it, and which declarations are superseded. Those declarations are now printed as absolute paths because `pi remove` resolves relative ones against the working directory.
+- Publishing refuses an unreachable publish directory (missing or unwritable mount) instead of silently recreating it on the boot disk. A malformed `state.json` falls back to the default rather than breaking loading.
+
 ## v1.3.1 — Published snapshots can live on another disk
 
 ### Features

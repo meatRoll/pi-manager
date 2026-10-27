@@ -47,7 +47,11 @@ export interface ProfileMetadata extends PackageMetadata {
   contexts: ContextFile[];
   [key: string]: unknown;
 }
-export interface ManagerState { defaultProfile: string | null }
+export interface ManagerState {
+  defaultProfile: string | null;
+  /** Persisted standalone publish directory; PI_MANAGER_PUBLISH_DIR overrides it. */
+  publishDir?: string;
+}
 export interface ProfileSummary { name: string; path: string; isDefault: boolean }
 export interface ConfiguredPackage {
   index: number;

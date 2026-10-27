@@ -13,6 +13,7 @@ import { VERSION } from './version.js';
 import { installPiExtension } from './install-pi.js';
 import { migratePiPackages } from './migration.js';
 import { selfUpdate } from './self-update.js';
+import { configReport, changePublishDir } from './config.js';
 
 const HELP = `pi-manager ${VERSION} — Pi resource manager extension
 
@@ -48,6 +49,10 @@ Primary interface: type /manager INSIDE Pi. This CLI is optional/legacy.
   pi-manager context import <profile> <path> [name]
   pi-manager context preview|edit|enable|disable <profile> <name>
   pi-manager context remove <profile> <name> --yes
+  pi-manager config                             Show manager home, publish directory and its source
+  pi-manager config publish-dir <path>          Save a publish directory for runs without the env var
+  pi-manager config publish-dir --unset         Return to the default inside the manager home
+
   pi-manager logs <profile> [filename]
 
 Types: skills, extensions, prompts, themes, context
@@ -99,6 +104,13 @@ export async function main(args: string[]) {
       ...(result.skipped.length ? [`Skipped manager bundle: ${result.skipped.join(', ')}`] : []),
       'Verify the import before publishing. Original declarations remain active; explicitly remove duplicates only after verification, before using the published copies.',
     ].join('\n'));
+  }
+  if (command === 'config') {
+    if (!subcommand) return print(await configReport());
+    if (subcommand !== 'publish-dir') throw new Error('Unknown config section. See --help.');
+    const target = rest[0];
+    if (target === undefined) return print(await configReport());
+    return print(await changePublishDir(target === '--unset' ? null : target));
   }
   const [profileInput, value, extra, label] = rest;
   if (command === 'profile') {

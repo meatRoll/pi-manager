@@ -48,15 +48,15 @@ Then type **inside Pi**:
 
 ### Move published snapshots to another disk
 
-Each publication copies hundreds of megabytes, and only the newest snapshot is live. Keep profiles where they are and redirect just the publication directory:
+Every publication copies hundreds of megabytes and only the newest snapshot is live. Keep profiles where they are and move the publication directory once:
 
 ```bash
-export PI_MANAGER_PUBLISH_DIR=/Volumes/big-disk/pi-manager-packages   # in your shell profile
-node dist/index.js install --yes     # publishes there and registers the new path
-pi remove ../../.pi-manager/pi-package   # drop the superseded declaration it reports
+node dist/index.js config publish-dir /Volumes/big-disk/pi-manager-packages
+node dist/index.js install --yes     # publishes there and registers the path
+pi remove <the declaration it prints as superseded>
 ```
 
-`install --yes` prints the exact `pi remove` line for stale `pi-package` declarations. Writes stay confined to the manager home plus this directory, and it may not overlap `~/.pi`, the manager home, or `profiles/`.
+The saved path lives in `~/.pi-manager/state.json` and applies to every launch, including apps that start Pi without a shell. `PI_MANAGER_PUBLISH_DIR` still overrides it for a single run, and `pi-manager config publish-dir --unset` returns to the default. Run `pi-manager config` to see the effective directory, where it came from, and whether Pi is actually loading it. Publishing refuses an unreachable mount instead of recreating the directory on the boot disk.
 
 ### Update
 

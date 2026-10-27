@@ -48,15 +48,15 @@ pi
 
 ### 把已发布快照放到另一块盘
 
-每次发布都会复制几百 MB，而只有最新一份是活的。可以只重定向发布目录，profiles 留在原处：
+每次发布都会复制几百 MB，而只有最新一份是活的。可以只搬发布目录，profiles 留在原处：
 
 ```bash
-export PI_MANAGER_PUBLISH_DIR=/Volumes/big-disk/pi-manager-packages   # 写进 shell 配置
-node dist/index.js install --yes     # 发布到新位置并注册新路径
-pi remove ../../.pi-manager/pi-package   # 删掉它报告的旧声明
+node dist/index.js config publish-dir /Volumes/big-disk/pi-manager-packages
+node dist/index.js install --yes     # 发布到新位置并注册路径
+pi remove <它打印出来的旧声明>
 ```
 
-`install --yes` 会打印需要删除的旧 `pi-package` 声明。写入范围被限制在 manager home 加这个目录内，且不得与 `~/.pi`、manager home 或 `profiles/` 重叠。
+保存的路径写在 `~/.pi-manager/state.json`，对所有启动方式生效（包括没有 shell 环境的应用）。`PI_MANAGER_PUBLISH_DIR` 仍可临时覆盖一次运行，`pi-manager config publish-dir --unset` 恢复默认。`pi-manager config` 会显示生效目录、来源，以及 Pi 是否真的在加载它。发布目录不可达时直接报错，不会在系统盘上悄悄重建一个。
 
 ### 更新
 

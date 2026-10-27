@@ -1,9 +1,9 @@
-import { readFileSync } from 'node:fs';
+import { accessSync, constants, readFileSync, existsSync } from 'node:fs';
 import { mkdir, readFile, rm, realpath } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { inventory } from './resources.js';
-import { assertProfile, ensureManagerHome, withProfileLock, MANAGER_HOME, PUBLISH_DIR, RESOURCE_TYPES, safePath, writeJson, readJson, isInside } from './storage.js';
+import { assertProfile, ensureManagerHome, withProfileLock, MANAGER_HOME, PUBLISH_DIR, PUBLISH_DIR_SOURCE, RESOURCE_TYPES, safePath, writeJson, readJson, isInside } from './storage.js';
 import { copyOwnedTree, generationPath, absoluteEntries, runPackageWorker } from './generations.js';
 import { packageState } from './package-state.js';
 import { getSettings, getMetadata } from './core.js';
@@ -48,8 +48,32 @@ export function exportableResources(resources) {
  * The live Pi keeps its old files even if a staging profile is edited/deleted.
  * External local packages are intentionally reference-only, not snapshotted.
  */
+/** Never recreate an explicitly configured publish directory on the boot disk when
+ * its volume is missing: fail loudly instead of publishing where Pi is not
+ * registered to read. A missing mount point such as /Volumes/disk leaves an
+ * unwritable ancestor, which is what this checks. A default directory inside the
+ * manager home needs no check.
+ */
+export function publishLocationAvailable(directory = PUBLISH_DIR) {
+    let ancestor = directory;
+    while (!existsSync(ancestor) && dirname(ancestor) !== ancestor)
+        ancestor = dirname(ancestor);
+    try {
+        accessSync(ancestor, constants.W_OK);
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+export function assertPublishLocation() {
+    if (PUBLISH_DIR_SOURCE === 'default' || publishLocationAvailable())
+        return;
+    throw new Error(`Publish directory unavailable: ${PUBLISH_DIR}. Mount its volume, or point "pi-manager config publish-dir" elsewhere.`);
+}
 export async function publishBundle(profile) {
     await ensureManagerHome();
+    assertPublishLocation();
     return profile ? withProfileLock(profile, () => buildBundle(profile)) : buildBundle(null);
 }
 async function buildBundle(profile) {

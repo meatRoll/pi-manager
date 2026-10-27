@@ -2,10 +2,10 @@
 import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { publishBundle, publishedBundle, BUNDLE_DIR } from './bundle.js';
+import { publishBundle, publishedBundle, BUNDLE_DIR, assertPublishLocation } from './bundle.js';
 import { run } from './core.js';
 import { sourcePiAgentDir } from './migration.js';
-import { ensureManagerHome } from './storage.js';
+import { canonicalLocation, ensureManagerHome, rememberPublishDir } from './storage.js';
 import { errorMessage } from './errors.js';
 
 /** Pi can only fast-forward `git:` sources, so the manager installs itself as one.
@@ -24,20 +24,32 @@ export async function hasManagerPackage(agentDir = sourcePiAgentDir()): Promise<
   } catch { return false; }
 }
 
-/** Declarations that point at a previous publication directory, e.g. after
- * PI_MANAGER_PUBLISH_DIR moved. Pi only loads the newest registered path.
+/** Local declarations of a published bundle: a manifest carrying a piManager
+ * binding, or a legacy "…/pi-package" directory that no longer exists.
  */
-export async function staleBundleDeclarations(agentDir = sourcePiAgentDir()): Promise<string[]> {
+export async function bundleDeclarations(agentDir = sourcePiAgentDir()): Promise<string[]> {
   try {
     const settings = JSON.parse(await readFile(join(agentDir, 'settings.json'), 'utf8')) as { packages?: unknown[] };
-    const stale: string[] = [];
+    const found: string[] = [];
     for (const entry of settings.packages || []) {
       const source = typeof entry === 'string' ? entry : (entry as { source?: string } | null)?.source;
-      if (typeof source !== 'string' || !/(?:^|\/)pi-package$/.test(source)) continue;
-      if (resolve(agentDir, source) !== BUNDLE_DIR) stale.push(source);
+      if (typeof source !== 'string' || /^(npm|git):/.test(source)) continue;
+      const path = resolve(agentDir, source);
+      try {
+        const manifest = JSON.parse(await readFile(join(path, 'package.json'), 'utf8')) as { piManager?: unknown };
+        if (manifest.piManager) found.push(source);
+      } catch { if (/(?:^|\/)pi-package$/.test(source)) found.push(source); }
     }
-    return stale;
+    return found;
   } catch { return []; }
+}
+/** Declarations pointing at a previous publication directory: Pi loads every one
+ * of them, so a moved publish directory must be re-registered and the old one
+ * removed or resources appear twice.
+ */
+export async function staleBundleDeclarations(agentDir = sourcePiAgentDir()): Promise<string[]> {
+  const publish = canonicalLocation(BUNDLE_DIR);
+  return (await bundleDeclarations(agentDir)).filter(source => canonicalLocation(resolve(agentDir, source)) !== publish);
 }
 
 export async function installPiExtension(acknowledged = false): Promise<void> {
@@ -54,14 +66,17 @@ export async function installPiExtension(acknowledged = false): Promise<void> {
     registered.push(source);
   }
   // Refresh the published resources without dropping the chosen preset.
+  assertPublishLocation();
   await publishBundle((await publishedBundle())?.profile || null);
+  const remembered = await rememberPublishDir();
   const code = await run(pi, ['install', BUNDLE_DIR]);
   if (code !== 0) throw new Error(`pi install exited ${code}`);
   registered.push(BUNDLE_DIR);
   const stale = await staleBundleDeclarations();
   console.log([
     `Registered Pi packages: ${registered.join(', ')}`,
-    ...(stale.length ? [`Remove the superseded declaration${stale.length > 1 ? 's' : ''}: pi remove ${stale.join(' ')}`] : []),
+    ...(remembered ? [`Saved ${remembered} as the publish directory for future runs.`] : []),
+    ...(stale.length ? [`Remove the superseded declaration${stale.length > 1 ? 's' : ''}: pi remove ${stale.map(item => resolve(sourcePiAgentDir(), item)).join(' ')}`] : []),
     registered.some(item => item === BUNDLE_DIR) ? `Published resources stay in ${BUNDLE_DIR}; update the manager with "pi update".` : '',
     'Restart Pi, then type /manager. No separate pi-manager process is needed.',
   ].filter(Boolean).join('\n'));
