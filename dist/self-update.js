@@ -36,7 +36,10 @@ export async function selfUpdate(options = {}) {
     const branch = await git(root, ['rev-parse', '--abbrev-ref', 'HEAD']);
     if (branch === 'HEAD')
         throw new Error('Detached HEAD; check out a branch before updating.');
-    const dirty = await git(root, ['status', '--porcelain']);
+    // Pi runs npm when it registers a package, which rewrites the lockfile. That
+    // is not a local change worth blocking an update for.
+    const dirty = (await git(root, ['status', '--porcelain'])).split('\n')
+        .filter(line => line.trim() && !/(?:^|\/)package-lock\.json$/.test(line.slice(3).trim())).join('\n');
     if (dirty)
         throw new Error(`Refusing to update a checkout with local changes:\n${dirty}`);
     const before = await git(root, ['rev-parse', '--short', 'HEAD']);

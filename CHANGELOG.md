@@ -10,6 +10,7 @@
 - The extension reads the `piManager` binding (profile, manager home, published context) from the published bundle on first use and caches it, so "one publication per session" still holds. Publishing now exports resources only.
 - `install --yes` registers both packages, skips a manager declaration that already exists, and honours `PI_MANAGER_SELF_SOURCE` (`none` skips the self install). The installer is now the only step that needs the checkout.
 - Migration skips an installed `pi-manager` package: importing it would load a second `/manager`.
+- Self-update ignores a `package-lock.json` rewrite: Pi runs `npm` when it registers a package, so the lockfile is never a meaningful local change.
 
 ## v1.2.0 — Installs straight from Git
 

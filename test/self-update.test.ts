@@ -47,6 +47,15 @@ test('a clean checkout fast-forwards to the remote without merging or republishi
   assert.equal(result.republished, null);
 });
 
+test('a lockfile rewritten by npm does not block an update', async () => {
+  const { seed, work } = await clonePair();
+  await writeFile(join(work, 'package-lock.json'), '{}\n');
+  await writeFile(join(seed, 'README.md'), 'second\n');
+  git(seed, 'commit', '-q', '-am', 'second'); git(seed, 'push', '-q');
+  const result = await selfUpdate({ root: work, republish: false });
+  assert.equal(result.changed, true);
+});
+
 test('an up-to-date checkout reports no change', async () => {
   const { work } = await clonePair();
   const result = await selfUpdate({ root: work, republish: false });
