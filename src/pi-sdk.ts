@@ -18,7 +18,18 @@ export function findPiSdk() {
   for (const candidate of candidates) {
     if (!existsSync(candidate)) continue;
     const executable = realpathSync(candidate);
-    const managed = join(dirname(dirname(executable)), 'install');
+    const installRoot = dirname(dirname(executable));
+    const packageRoots = [
+      dirname(executable),
+      installRoot,
+      join(installRoot, 'lib'),
+      join(installRoot, 'lib', 'pi'),
+    ];
+    for (const root of packageRoots) {
+      const pkg = join(root, 'node_modules', PACKAGE);
+      if (existsSync(join(pkg, 'package.json'))) return pkg;
+    }
+    const managed = join(installRoot, 'install');
     const current = join(managed, 'current-version');
     if (existsSync(current)) {
       const version = readFileSync(current, 'utf8').trim();
@@ -27,6 +38,8 @@ export function findPiSdk() {
       if (existsSync(join(pkg, 'package.json'))) return pkg;
     }
     for (let cursor = dirname(executable); dirname(cursor) !== cursor; cursor = dirname(cursor)) {
+      const pkg = join(cursor, 'node_modules', PACKAGE);
+      if (existsSync(join(pkg, 'package.json'))) return pkg;
       const manifest = join(cursor, 'package.json');
       try { if (JSON.parse(readFileSync(manifest, 'utf8')).name === PACKAGE) return cursor; }
       catch { /* continue walking */ }
