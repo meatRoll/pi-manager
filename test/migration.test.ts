@@ -71,9 +71,13 @@ test('import six declarations offline, preserve filters and originals, skip mana
   for (const name of ['auth.json', 'models.json', 'AGENTS.md', 'sessions']) await assert.rejects(stat(join(generation, name)), { code: 'ENOENT' });
   const current = await inventory('mine');
   assert.equal(current.packages.length, 6);
-  assert.equal(current.resources.length, 6);
+  // Pi also discovers user-level resources from ~/.agents or ~/.claude, which
+  // exist on some developer machines and not in CI. Only the migrated
+  // declarations are under test here.
+  const migrated = current.resources.filter(resource => result.imported.includes(resource.source));
+  assert.equal(migrated.length, 6);
   const labels = ['one', 'acme/two', 'acme/three', 'acme/four', 'acme/five', 'local-tool'];
-  assert.deepEqual(current.resources.map(resource => resource.displayName).sort(), labels.map(name => `${name} · index.js`).sort());
+  assert.deepEqual(migrated.map(resource => resource.displayName).sort(), labels.map(name => `${name} · index.js`).sort());
   assert.deepEqual(current.packages.map(pkg => pkg.displayName), labels);
   assert.equal(current.packages.find(pkg => pkg.source === gitSources[0])?.name, '@upstream/two');
   assert.equal(current.resources.find(item => item.source === 'npm:one')?.name, 'index.js');
