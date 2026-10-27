@@ -12,11 +12,13 @@ import { errorCode, errorMessage } from './errors.js';
 import { VERSION } from './version.js';
 import { installPiExtension } from './install-pi.js';
 import { migratePiPackages } from './migration.js';
+import { selfUpdate } from './self-update.js';
 
 const HELP = `pi-manager ${VERSION} — Pi resource manager extension
 
 Primary interface: type /manager INSIDE Pi. This CLI is optional/legacy.
   pi-manager install --yes                       Register extension bundle, then restart Pi
+  pi-manager self-update --yes                   git pull the manager checkout, republish, restart Pi
   pi-manager migrate <profile> [agent-dir] --yes  Copy installed Pi packages into an empty staging profile
 
   pi-manager tui                                 Legacy standalone maintenance UI
@@ -73,6 +75,18 @@ export async function main(args: string[]) {
   if (['--version', '-v'].includes(command)) return print(VERSION);
   const rest = raw.filter(value => value !== '--yes' && value !== '--json');
   if (command === 'install') { acknowledge(args); return installPiExtension(true); }
+  if (command === 'self-update') {
+    acknowledge(args);
+    const result = await selfUpdate();
+    return print([
+      result.changed
+        ? `Updated ${result.root}: ${result.before} → ${result.after}.`
+        : `Already up to date: ${result.root} at ${result.after}.`,
+      result.republished ? `Republished preset ${result.republished} for the next Pi start.` : 'No published preset to re-point.',
+      ...(result.republishError ? [`Republish failed: ${result.republishError}`] : []),
+      'Restart Pi to load the updated manager.',
+    ].join('\n'));
+  }
   if (command === 'migrate') {
     acknowledge(args);
     const target = requireValue(subcommand, 'Profile');

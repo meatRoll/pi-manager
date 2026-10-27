@@ -2,7 +2,7 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-**v1.0.0 — first stable release.** [Release notes](CHANGELOG.md) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
+**v1.2.0 — installs and updates straight from Git.** [Release notes](CHANGELOG.md) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
 
 A **Pi extension** for managing packages, skills, extensions, prompt templates, themes, and preset Markdown context **inside Pi**.
 
@@ -17,13 +17,12 @@ No separate manager process or nested Pi session is required. Written in **TypeS
 Requires **Node.js 22.19+**, Git, and Pi. Tested with **Pi 1.3.0**.
 
 ```bash
-git clone https://github.com/meatRoll/pi-manager.git
-cd pi-manager
-npm ci
-npm run install:pi -- --yes
+git clone https://github.com/meatRoll/pi-manager.git ~/.pi-manager/manager
+cd ~/.pi-manager/manager
+node dist/index.js install --yes
 ```
 
-The installer builds the project, creates a manager-owned local Pi package under `~/.pi-manager/pi-package`, then registers it with the official `pi install <path>` command. **This deliberately adds one package declaration to your Pi agent settings.** It does not copy or replace existing packages, credentials, sessions, models, or project files.
+Compiled `dist/` is committed, so a clone runs as-is and needs no build step (`npm ci` is only for development). The installer creates a manager-owned local Pi package under `~/.pi-manager/pi-package`, then registers it with the official `pi install <path>` command. **This deliberately adds one package declaration to your Pi agent settings.** It does not copy or replace existing packages, credentials, sessions, models, or project files.
 
 Restart Pi in your working project:
 
@@ -38,9 +37,18 @@ Then type **inside Pi**:
 /manager
 ```
 
-`npm start` simply starts normal `pi` after installation. Keep the checkout in place because the registered package points to its compiled implementation. After moving it or updating the code, run `npm ci` and `npm run install:pi -- --yes` again, then restart Pi.
+`npm start` simply starts normal `pi` after installation. Keep the checkout in place because the registered package points to its compiled implementation; after moving it, run `node dist/index.js install --yes` again and restart Pi.
 
-The GitHub repository is public. `package.json` remains `private: true` to prevent accidental npm publication: the npm name belongs to another project. **Do not use `npm install -g pi-manager` or `pi install npm:pi-manager`.** Installing the raw Git URL is not the supported setup path because generated `dist/` files are not committed; use the checkout/build/install commands above.
+### Update
+
+```bash
+git -C ~/.pi-manager/manager pull --ff-only
+# or, from the checkout: node dist/index.js self-update --yes
+```
+
+Then restart Pi. Inside Pi the same action lives in **More → Update pi-manager from GitHub**: it fast-forwards the checkout, republishes so the next start loads that same installation, and asks you to restart. A dirty tree, a detached HEAD or an unrelated `origin` is refused — the updater never merges or rebases, and it never touches your staged packages, resources or presets.
+
+The GitHub repository is public. `package.json` remains `private: true` to prevent accidental npm publication: the npm name belongs to another project. **Do not use `npm install -g pi-manager` or `pi install npm:pi-manager`.** Do not also run `pi install git:github.com/meatRoll/pi-manager`: that registers a second copy of `/manager` next to the published bundle. The clone plus `install --yes` path above is the supported one.
 
 ### Try without permanent registration
 

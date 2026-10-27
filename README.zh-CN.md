@@ -2,7 +2,7 @@
 
 [English](README.md) | **简体中文**
 
-**v1.0.0 — 首个正式版本。** [版本说明](CHANGELOG.md#简体中文) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
+**v1.2.0 — 可直接从 Git 安装与更新。** [版本说明](CHANGELOG.md#简体中文) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
 
 一个**在 Pi 里面使用的扩展**，管理插件包、Skills、Extensions、提示词模板、主题和预置 Markdown 上下文。
 
@@ -17,13 +17,12 @@
 需要 **Node.js 22.19+**、Git 和已安装的 Pi；当前在 **Pi 1.3.0** 验证。
 
 ```bash
-git clone https://github.com/meatRoll/pi-manager.git
-cd pi-manager
-npm ci
-npm run install:pi -- --yes
+git clone https://github.com/meatRoll/pi-manager.git ~/.pi-manager/manager
+cd ~/.pi-manager/manager
+node dist/index.js install --yes
 ```
 
-安装器构建项目，在 `~/.pi-manager/pi-package` 创建管理器拥有的本地 Pi 包，再调用官方 `pi install <path>` 注册。**这一步会明确地在 Pi agent settings 中增加一个包声明。** 不复制或替换原有包、凭证、会话、模型和项目配置。
+`dist/` 已随仓库提交，克隆下来即可直接运行，无需构建（`npm ci` 只用于开发）。安装器在 `~/.pi-manager/pi-package` 创建管理器拥有的本地 Pi 包，再调用官方 `pi install <path>` 注册。**这一步会明确地在 Pi agent settings 中增加一个包声明。** 不复制或替换原有包、凭证、会话、模型和项目配置。
 
 退出 Pi，在你的项目目录重新启动：
 
@@ -38,9 +37,18 @@ pi
 /manager
 ```
 
-安装后 `npm start` 只是启动普通 `pi`。请保留源码目录，因为注册包引用其编译后的实现；移动源码目录或更新代码后，重新执行 `npm ci`、`npm run install:pi -- --yes`，再重启 Pi。
+安装后 `npm start` 只是启动普通 `pi`。请保留源码目录，因为注册包引用其编译后的实现；移动目录后重新执行 `node dist/index.js install --yes`，再重启 Pi。
 
-GitHub 仓库公开；`package.json` 的 `private: true` 只防止误发布到 npm。npm 上同名包属于其他项目，**不要使用 `npm install -g pi-manager` 或 `pi install npm:pi-manager`**。仓库不提交 `dist/`，因此暂不支持直接用 Git URL 安装；请使用上面的 clone、build 和安装步骤。
+### 更新
+
+```bash
+git -C ~/.pi-manager/manager pull --ff-only
+# 或在目录内：node dist/index.js self-update --yes
+```
+
+然后重启 Pi。Pi 内等效入口是 **More → Update pi-manager from GitHub**：它只做 fast-forward、重新发布（让下次启动仍加载同一套安装），并提示重启。工作区有改动、分离 HEAD、或 `origin` 不是本仓库时会被拒绝——更新器不会 merge/rebase，也不会碰你的暂存包、资源或预设。
+
+GitHub 仓库公开；`package.json` 的 `private: true` 只防止误发布到 npm。npm 上同名包属于其他项目，**不要使用 `npm install -g pi-manager` 或 `pi install npm:pi-manager`**。也不要额外执行 `pi install git:github.com/meatRoll/pi-manager`：那会和已发布快照一起注册第二个 `/manager`。请使用上面的 clone + `install --yes`。
 
 ### 不注册，先试用
 

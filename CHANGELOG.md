@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.2.0 — Installs straight from Git
+
+Compiled `dist/` now ships in the repository, so a clone runs without a build step, and the manager can update itself from GitHub.
+
+### Features
+
+- `pi-manager self-update --yes` and **More → Update pi-manager from GitHub** fast-forward the manager checkout with `git pull --ff-only`, republish the current preset so the next Pi start loads the same installation, and refuse a dirty tree, a detached HEAD or an unrelated remote instead of merging anything.
+- `dist/` is committed: `npm ci` and `npm run build` are development-only steps, and `git pull` alone updates an installation.
+
 ## v1.1.0 — Honest dashboard and self-contained publications
 
 Keyboard hints now follow the selected category and row, disabled-package errors say what to do,

@@ -5,6 +5,7 @@ import { listProfiles, createProfile, copyProfile, deleteProfile, profilePath, g
 import { inventory, importResource, previewResource, writeResource, removeResource, createContext, toggleResource, originLabel } from './resources.js';
 import { packageOperation, inspectPackage, togglePackage, packageVersions, rollbackPackages } from './packages.js';
 import { migratePiPackages, sourcePiAgentDir } from './migration.js';
+import { selfUpdate } from './self-update.js';
 import { publishBundle, publishedBundle, BUNDLE_DIR } from './bundle.js';
 import type { LoadedBundle } from './bundle.js';
 import { choose, view, working } from './pi-ui.js';
@@ -177,6 +178,7 @@ export async function openManager(ctx: ExtensionCommandContext, loaded?: LoadedB
     { id: 'profiles', label: 'Manage / switch presets' },
     { id: 'migrate', label: 'Import packages from current Pi' }, { id: 'update', label: 'Update all packages' },
     { id: 'versions', label: 'Package generations / restore' }, { id: 'logs', label: 'Package operation logs' },
+    { id: 'self-update', label: 'Update pi-manager from GitHub (git pull)' },
     { id: 'copy', label: 'Copy profile' }, { id: 'default', label: 'Set as default manager preset' },
     { id: 'delete-profile', label: 'Delete staging profile' },
     { id: 'manager-only', label: 'Use manager only on next Pi start' }, { id: 'about', label: 'About / loading instructions' },
@@ -262,6 +264,16 @@ export async function openManager(ctx: ExtensionCommandContext, loaded?: LoadedB
       else if (action.id === 'profiles') { const selected = await pickProfile(); if (selected) { profile = selected; state = newDashboardState(); changed(); } }
       else if (action.id === 'versions') await versionsPage(profile!);
       else if (action.id === 'logs') await logsPage(profile!);
+      else if (action.id === 'self-update') await guard(async () => {
+        if (!await ctx.ui.confirm('Update pi-manager from GitHub?', 'Runs git pull --ff-only in the manager checkout, then republishes so the next Pi start still loads the same installation. Packages, resources and presets are not touched. Restart Pi afterwards.')) return;
+        const result = await working(ctx, 'Updating pi-manager…', () => selfUpdate());
+        ctx.ui.notify([
+          result.changed ? `Updated ${result.before} → ${result.after}.` : `Already up to date (${result.after}).`,
+          result.republished ? `Republished ${result.republished} for next start.` : 'Nothing republished.',
+          ...(result.republishError ? [`Republish failed: ${result.republishError}`] : []),
+          'Restart Pi to load it.',
+        ].join(' '), result.republishError ? 'warning' : 'info');
+      });
       else if (action.id === 'migrate') await migrate(profile!);
       else if (action.id === 'update') await packageRun(profile!, 'update');
       else if (action.id === 'default') { await setDefaultProfile(profile!); notify(`Default manager preset: ${profile}. This does not publish or switch the running Pi.`); }
