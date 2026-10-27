@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- The dashboard footer is now contextual: it only lists shortcuts that apply to the current category and selected row. Package rows advertise their own menu, `More` rows run actions, and `E edit` / `Del delete` appear only for manager-owned copies instead of on every screen.
+
 ## v1.0.0 — First stable release
 
 The first stable release of **pi-manager**, a resource manager that runs inside Pi through `/manager`.

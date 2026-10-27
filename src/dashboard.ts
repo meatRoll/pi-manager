@@ -117,6 +117,23 @@ export async function dashboard(ctx: ExtensionCommandContext, model: DashboardMo
       const index = filtered.findIndex(row => row.id === list.getSelectedItem()?.value);
       list.setSelectedIndex(Math.max(0, Math.min(filtered.length - 1, index + offset))); saveSelection();
     };
+    // Keys are contextual: a package row opens a package menu, \`more\` rows run
+    // actions, and only resource rows can be toggled/edited/deleted. Showing one
+    // static footer made every category look identical.
+    const hintLines = (row: DashboardEntry | undefined, width: number) => {
+      const line = (items: string[]) => items.filter(Boolean).join(' · ');
+      const compact = width < 50;
+      const panel = model.busy || model.error ? [] : ['A add', 'P publish'];
+      const rowKeys = !row ? [] : state.tab === 'packages'
+        ? [row.toggle ? 'Space toggle package' : '', 'Enter package menu']
+        : state.tab === 'more'
+          ? ['Enter run action']
+          : [row.toggle ? 'Space toggle' : '', compact ? 'Enter actions' : 'Enter preview / actions', row.editable ? 'E edit' : '', row.deletable ? 'Del delete' : ''];
+      const lines = compact
+        ? [[`[${tabLabel(state.tab)}]`, '←→ Tab', '↑↓ select'], rowKeys, [...panel, 'S preset', '/ search', 'Esc']]
+        : [['↑↓ select', '←→ / Tab category', ...rowKeys], [...panel, 'S switch preset', 'R refresh', '/ search', 'Esc close']];
+      return lines.map(line).filter(Boolean).flatMap(text => wrapTextWithAnsi(text, width));
+    };
     const renderTabs = (width: number) => {
       const available = [...tabs, ...extraTabs.filter(tab => tab.id === state.tab)];
       const labels = (short: boolean) => available.map(tab => tab.id === state.tab
@@ -144,8 +161,8 @@ export async function dashboard(ctx: ExtensionCommandContext, model: DashboardMo
       set focused(value: boolean) { focused = value; input.focused = focused && searching; },
       render(width: number) {
         width = Math.max(1, width);
-        const hintText = width < 50 ? '←→ Tab · ↑↓ select\nSpace toggle · Enter view\nE edit · A add · P publish\nS presets · / search · Esc' : '↑↓ select · ←→ / Tab category · Space toggle · Enter preview / actions\nE edit · Del delete · A add · P publish · S switch preset · R refresh · / search · Esc close';
-        const hints = wrapTextWithAnsi(hintText, width);
+        const rowForHints = selected();
+        const hints = hintLines(rowForHints, width);
         const header = [theme.fg('accent', `pi-manager / ${model.profile}    [S switch preset]`),
           theme.fg('muted', lineText(model.loading)), theme.fg(model.pending ? 'warning' : 'muted', lineText(model.publication)),
           renderTabs(width),
@@ -156,7 +173,9 @@ export async function dashboard(ctx: ExtensionCommandContext, model: DashboardMo
         const row = selected();
         const empty = model.error ? `Cannot read staging metadata: ${lineText(model.error)} · R retry / S switch preset`
           : model.busy ? 'Reading resource metadata… You can change category, search, or press Esc.'
-          : currentView().query ? 'No matching entries. Esc clears search.' : 'No entries. Press A to add a resource or package.';
+          : currentView().query ? 'No matching entries. Esc clears search.'
+          : state.tab === 'packages' ? 'No packages. Press A to add one.'
+          : state.tab === 'more' ? 'No actions.' : 'No entries. Press A to add a resource.';
         return [...header, ...(filtered.length ? list.render(width) : [theme.fg(model.error ? 'warning' : 'dim', empty)]), '',
           theme.fg('muted', row ? `${lineText(row.label)}${row.detail ? ` · ${lineText(row.detail)}` : ''}` : ''),
           ...hints.map(line => theme.fg('dim', line))].map(line => truncateToWidth(line, width));

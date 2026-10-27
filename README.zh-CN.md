@@ -81,6 +81,7 @@ Space toggle · Enter preview · E edit · A add · P publish
 - RPC 客户端使用同样的扁平资源列表，通过明确的分类/操作对话框交互，不依赖终端快捷键。首个列表只等资源 metadata，不再等待完整内容比较；RPC 无法修改已经打开的对话框，检查结果会在下次对话框中显示。
 - 包内 Extension 显示为 `包标签 · src/index.ts`，便于区分同名入口。Git 包优先使用**实际配置的仓库**（如 `meatRoll/pi-image-gen`），不使用可能残留的上游 manifest 名称；非 GitHub 来源保留主机名。npm 包使用配置中的包名（保留 scope）；本地包若有独立 Git 仓库，则只读使用其 `origin` 仓库标签（不访问网络）；否则使用 manifest 名称或配置路径，不会借用父目录仓库或可能残留的 manifest 仓库 URL。包列表保持相同标签，原始 manifest 名称仍可在包详情中查看。独立文件名不变；这些只是显示标签，不会重命名文件、修改来源或改变资源 ID。
 - 导入 Skill 选择包含 `SKILL.md` 的目录。导入资源会复制文件，之后编辑管理器副本不改原文件。
+- Pi 自己发现的用户级资源（例如 `~/.agents/skills`）显示为 `user-level · read-only`：不能在预设里启停或编辑，发布时也不导出——Pi 每次启动都会自己加载，这样快照保持自包含。
 - 包来源支持 `npm:name@version`、`git:github.com/owner/repo@ref`、本地路径。本地包是**外部引用**，不复制、不安装依赖、不删除其原目录。
 - 包操作和删除需确认。安装脚本仍有当前用户权限。
 
