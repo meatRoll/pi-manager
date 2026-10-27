@@ -26,7 +26,7 @@ Compiled `dist/` is committed, so a clone runs as-is and needs no build step (`n
 
 | Package | Contents | Updated by |
 |---|---|---|
-| `git:github.com/meatRoll/pi-manager` | the manager itself (`/manager`) | `pi update` |
+| `git:github.com/meatRoll/pi-manager` | the manager itself (`/manager`) | `pi update --extensions` |
 | `~/.pi-manager/pi-package` | published resources only (packages, skills, prompts, themes, context) | **P** inside `/manager` |
 
 **This deliberately adds two package declarations to your Pi agent settings.** It does not copy or replace existing packages, credentials, sessions, models, or project files. The checkout is only needed to run the installer; registers already skip a manager declaration that exists (`PI_MANAGER_SELF_SOURCE=none` skips it entirely).
@@ -49,7 +49,8 @@ Then type **inside Pi**:
 ### Update
 
 ```bash
-pi update                                                  # the manager (git package)
+pi update --extensions                                     # the manager (git package) + others
+pi update git:github.com/meatRoll/pi-manager                # or just the manager
 node ~/.pi-manager/manager/dist/index.js self-update --yes  # same thing from a checkout
 ```
 

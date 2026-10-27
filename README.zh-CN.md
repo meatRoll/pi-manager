@@ -26,7 +26,7 @@ node dist/index.js install --yes
 
 | 包 | 内容 | 更新方式 |
 |---|---|---|
-| `git:github.com/meatRoll/pi-manager` | 管理器本体（`/manager`） | `pi update` |
+| `git:github.com/meatRoll/pi-manager` | 管理器本体（`/manager`） | `pi update --extensions` |
 | `~/.pi-manager/pi-package` | 已发布的资源（包、Skills、提示词、主题、上下文） | 在 `/manager` 里按 **P** |
 
 **这一步会在 Pi agent settings 中增加两个包声明。** 不复制或替换原有包、凭证、会话、模型和项目配置。源码目录只用于运行安装器，之后可以删除；已存在的管理器声明会被跳过（`PI_MANAGER_SELF_SOURCE=none` 可完全跳过）。
@@ -49,7 +49,8 @@ pi
 ### 更新
 
 ```bash
-pi update                                                   # 管理器本体（git 包）
+pi update --extensions                                      # 管理器本体（git 包）及其他扩展
+pi update git:github.com/meatRoll/pi-manager                 # 或只更新管理器
 node ~/.pi-manager/manager/dist/index.js self-update --yes   # 从源码目录做同样的事
 ```
 

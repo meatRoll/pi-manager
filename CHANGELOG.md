@@ -6,7 +6,7 @@
 
 ### Features
 
-- The manager registers as its own Pi package (`git:github.com/meatRoll/pi-manager`) instead of generating an `extension.mjs` entry inside every snapshot. `pi update` fast-forwards it like any other Git package, and deleting or moving a checkout no longer strands a published preset.
+- The manager registers as its own Pi package (`git:github.com/meatRoll/pi-manager`) instead of generating an `extension.mjs` entry inside every snapshot. `pi update --extensions` (or `pi update <source>`) fast-forwards it like any other Git package, and deleting or moving a checkout no longer strands a published preset.
 - The extension reads the `piManager` binding (profile, manager home, published context) from the published bundle on first use and caches it, so "one publication per session" still holds. Publishing now exports resources only.
 - `install --yes` registers both packages, skips a manager declaration that already exists, and honours `PI_MANAGER_SELF_SOURCE` (`none` skips the self install). The installer is now the only step that needs the checkout.
 - Migration skips an installed `pi-manager` package: importing it would load a second `/manager`.
