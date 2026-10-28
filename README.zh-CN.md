@@ -58,6 +58,17 @@ pi remove <它打印出来的旧声明>
 
 保存的路径写在 `~/.pi-manager/state.json`，对所有启动方式生效（包括没有 shell 环境的应用）。`PI_MANAGER_PUBLISH_DIR` 仍可临时覆盖一次运行，`pi-manager config publish-dir --unset` 恢复默认。`pi-manager config` 会显示生效目录、来源，以及 Pi 是否真的在加载它。发布目录不可达时直接报错，不会在系统盘上悄悄重建一个。
 
+### 清理旧快照
+
+发布会保留旧快照，让上一份启动状态仍可用，但不会自动删除历史。先预览，再加 `--yes` 删除当前快照和最近保留份数之外的内容：
+
+```bash
+node ~/.pi/agent/git/github.com/meatRoll/pi-manager/dist/index.js prune --keep 2
+node ~/.pi/agent/git/github.com/meatRoll/pi-manager/dist/index.js prune --keep 2 --yes
+```
+
+`--keep 2` 总共保留两份，包括 `package.json` 当前引用的快照。如果当前快照缺失，命令会拒绝删除任何内容。需要更多回退点时使用更大的 `--keep N`。
+
 ### 更新
 
 ```bash
@@ -122,7 +133,7 @@ Space toggle · Enter preview · E edit · A add · P publish
 3. 正常退出 Pi，再重新启动。注册的本地包会在启动时提供选中的 extensions、skills、模板、主题和上下文。
 4. 再打开 `/manager`，标题分别显示**当前 loaded** 和**下次启动 next start** 的预设。
 
-发布会将管理器拥有的包/资源复制到独立快照。继续编辑或删除暂存 profile 不会删掉当前 Pi 使用的资源。外部本地包仍然只是引用，其自身文件变化不在此隔离范围内。快照暂不自动清理。
+发布会将管理器拥有的包/资源复制到独立快照。继续编辑或删除暂存 profile 不会删掉当前 Pi 使用的资源。外部本地包仍然只是引用，其自身文件变化不在此隔离范围内。发布不会自动删除历史；使用 `pi-manager prune --keep N` 预览旧快照，再加 `--yes` 删除。当前活跃快照始终受保护。
 
 选中预设是在当前普通 Pi 环境中**追加受管资源**，不会屏蔽原有个人/项目/共享资源，不改变项目信任，不切换凭证、模型配置或会话存储。资源名称冲突遵循 Pi 原有规则。选择 **More → Use manager only on next Pi start** 可在下次启动只加载管理器，不再导出预设资源。
 
@@ -184,7 +195,7 @@ node dist/index.js migrate mine --yes
 - 文件发现/校验不保证第三方代码、Skill 或主题运行时一定加载成功。
 - 受管快照内的依赖 symlink 会重定位；拒绝指向外部的 symlink、特殊文件和 linked Git worktree。导入资源拒绝 symlink。
 - 不完整的旧基线允许初始化，但不宣称可恢复；缺失的包声明不能被发布成误导性的空预设。
-- 提供当前/上一代切换，不提供任意历史选择。版本代及发布快照保留，会额外占磁盘。
+- 提供当前/上一代切换，不提供任意历史选择。已发布快照会一直保留，直到显式执行 `prune` 清理旧版本，因此会额外占用磁盘。
 - 强制结束可能留下 `.lock` 或候选目录。确认相关 Pi/npm/Git 子进程全部退出后再手动清理，不自动抢占未知锁。
 - 原子文件替换是正常操作的发布边界，不是整个磁盘断电持久性的事务保证。
 

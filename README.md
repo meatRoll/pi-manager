@@ -58,6 +58,17 @@ pi remove <the declaration it prints as superseded>
 
 The saved path lives in `~/.pi-manager/state.json` and applies to every launch, including apps that start Pi without a shell. `PI_MANAGER_PUBLISH_DIR` still overrides it for a single run, and `pi-manager config publish-dir --unset` returns to the default. Run `pi-manager config` to see the effective directory, where it came from, and whether Pi is actually loading it. Publishing refuses an unreachable mount instead of recreating the directory on the boot disk.
 
+### Clean old snapshots
+
+Publishing keeps old snapshots so the previous startup state remains available, but it does not delete history automatically. Preview cleanup first, then add `--yes` to remove everything beyond the active snapshot and the newest retained copies:
+
+```bash
+node ~/.pi/agent/git/github.com/meatRoll/pi-manager/dist/index.js prune --keep 2
+node ~/.pi/agent/git/github.com/meatRoll/pi-manager/dist/index.js prune --keep 2 --yes
+```
+
+`--keep 2` retains two snapshots total, including the snapshot currently referenced by `package.json`. The command refuses to remove anything if that active snapshot is missing. Use a larger `--keep N` when you need more rollback points.
+
 ### Update
 
 ```bash
@@ -122,7 +133,7 @@ The footer is contextual: it lists only the keys that currently do something. `E
 3. Exit Pi normally and start it again. The registered local package supplies the selected extensions, skills, templates, themes, and context at startup.
 4. Open `/manager` again. Its header distinguishes the **loaded** preset from the selection published for the **next start**.
 
-Publishing copies owned package/resource bytes into a detached snapshot. Editing or deleting the staging profile does not remove files used by the live session. External local packages remain references, so their own edits are not isolated. Snapshots currently have no automatic garbage collection.
+Publishing copies owned package/resource bytes into a detached snapshot. Editing or deleting the staging profile does not remove files used by the live session. External local packages remain references, so their own edits are not isolated. Publishing leaves history in place; use `pi-manager prune --keep N` to preview old snapshots and add `--yes` to remove them. The active snapshot is always protected.
 
 A selected preset **adds managed resources to your normal Pi environment**. It does not suppress existing personal/project/shared resources, change project trust, or switch credentials/model configuration/session storage. Names can conflict with existing resources; normal Pi collision rules apply. Choose **More → Use manager only on next Pi start** to stop exporting preset resources on the next launch.
 
@@ -184,7 +195,7 @@ Whole-package disable sets all four resource filters to `[]` and preserves the p
 - Validation discovers resource files; it does not guarantee that third-party code or skill/theme content will load successfully at runtime.
 - Internal dependency symlinks are relocated into copies; external symlinks, special files, and linked Git worktrees are refused in owned snapshots. Imported resources reject symlinks.
 - An incomplete legacy baseline can initialize but is not advertised as restorable. Missing package declarations cannot be published as a misleading empty preset.
-- Current/previous generation switching is supported, not arbitrary history selection. Generations and published snapshots are retained and use extra disk space.
+- Current/previous generation switching is supported, not arbitrary history selection. Published snapshots stay until the explicit `prune` command removes older ones, so they use extra disk space.
 - Forced termination can leave `.lock` or candidate directories. Confirm all related Pi/npm/Git processes have stopped before manual cleanup. Unknown locks are never automatically stolen.
 - Atomic file replacement is a publication boundary, not a whole-disk power-failure durability guarantee.
 

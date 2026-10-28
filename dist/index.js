@@ -12,6 +12,7 @@ import { installPiExtension } from './install-pi.js';
 import { migratePiPackages } from './migration.js';
 import { selfUpdate } from './self-update.js';
 import { configReport, changePublishDir } from './config.js';
+import { DEFAULT_SNAPSHOT_RETENTION, prunePublishedSnapshots } from './bundle.js';
 const HELP = `pi-manager ${VERSION} — Pi resource manager extension
 
 Primary interface: type /manager INSIDE Pi. This CLI is optional/legacy.
@@ -49,6 +50,8 @@ Primary interface: type /manager INSIDE Pi. This CLI is optional/legacy.
   pi-manager config                             Show manager home, publish directory and its source
   pi-manager config publish-dir <path>          Save a publish directory for runs without the env var
   pi-manager config publish-dir --unset         Return to the default inside the manager home
+  pi-manager prune [--keep N]                   Preview old publication snapshots to remove
+  pi-manager prune [--keep N] --yes             Remove old snapshots, keeping the active and newest N-1
 
   pi-manager logs <profile> [filename]
 
@@ -64,6 +67,43 @@ const requireValue = (value, label) => { if (!value)
 const acknowledge = (args) => { if (!args.includes('--yes'))
     throw new Error('Explicit --yes required. Review third-party code and scripts, or the data being deleted.'); };
 const print = (text) => console.log(plain(text));
+function parseSnapshotKeep(args) {
+    let keep = DEFAULT_SNAPSHOT_RETENTION;
+    for (let index = 1; index < args.length; index += 1) {
+        const arg = args[index];
+        if (arg === '--yes')
+            continue;
+        let value;
+        if (arg === '--keep')
+            value = args[++index];
+        else if (arg.startsWith('--keep='))
+            value = arg.slice('--keep='.length);
+        else
+            throw new Error(`Unknown prune option: ${arg}. See --help.`);
+        if (!value || !/^\d+$/.test(value))
+            throw new Error('--keep requires a positive integer. See --help.');
+        keep = Number(value);
+        if (!Number.isSafeInteger(keep) || keep < 1)
+            throw new Error('--keep requires a positive integer. See --help.');
+    }
+    return keep;
+}
+function formatSnapshotPrune(result) {
+    const lines = [
+        `Publish directory: ${result.directory}`,
+        `Active snapshot: ${result.active || '(none)'}`,
+        `Retention: ${result.keep} snapshot${result.keep === 1 ? '' : 's'} including the active one`,
+    ];
+    if (result.reason)
+        return [...lines, result.reason].join('\n');
+    lines.push(`Keeping ${result.retained.length}: ${result.retained.join(', ')}`);
+    if (!result.toRemove.length)
+        return [...lines, 'No old snapshots to remove.'].join('\n');
+    lines.push(`${result.dryRun ? 'Would remove' : 'Removed'} ${result.dryRun ? result.toRemove.length : result.removed.length} snapshot${result.toRemove.length === 1 ? '' : 's'}: ${result.toRemove.join(', ')}`);
+    if (result.dryRun)
+        lines.push('Pass --yes to remove them.');
+    return lines.join('\n');
+}
 async function contextId(profile, name) {
     const item = (await inventory(profile)).resources.find(resource => resource.type === 'context' && (resource.name === name || resource.id === name));
     if (!item)
@@ -110,6 +150,10 @@ export async function main(args) {
             ...(result.skipped.length ? [`Skipped manager bundle: ${result.skipped.join(', ')}`] : []),
             'Verify the import before publishing. Original declarations remain active; explicitly remove duplicates only after verification, before using the published copies.',
         ].join('\n'));
+    }
+    if (command === 'prune') {
+        const keep = parseSnapshotKeep(args);
+        return print(formatSnapshotPrune(await prunePublishedSnapshots(keep, args.includes('--yes'))));
     }
     if (command === 'config') {
         if (!subcommand)

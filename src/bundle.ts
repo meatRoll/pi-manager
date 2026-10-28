@@ -1,5 +1,5 @@
 import { accessSync, constants, readFileSync, existsSync } from 'node:fs';
-import { mkdir, readFile, rm, realpath } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, realpath } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { inventory } from './resources.js';
@@ -57,10 +57,61 @@ export function exportableResources<T extends Pick<Resource, 'type' | 'enabled' 
     resource.enabled && resource.type !== 'context' && resource.origin !== 'global');
 }
 
-/** Publish a detached, immutable package snapshot for the next ordinary Pi start.
- * The live Pi keeps its old files even if a staging profile is edited/deleted.
- * External local packages are intentionally reference-only, not snapshotted.
+export const DEFAULT_SNAPSHOT_RETENTION = 2;
+export interface SnapshotPruneResult {
+  directory: string;
+  active: string | null;
+  keep: number;
+  retained: string[];
+  toRemove: string[];
+  removed: string[];
+  dryRun: boolean;
+  reason?: string;
+}
+
+function descendingSnapshotIds(ids: string[]) {
+  return [...ids].sort((a, b) => a < b ? 1 : a > b ? -1 : 0);
+}
+
+/** Remove old detached snapshots while preserving the current package binding.
+ * `keep` includes the active snapshot. Without an active package manifest the
+ * operation is a safe no-op because there is no reliable root to protect.
  */
+export async function prunePublishedSnapshots(
+  keep = DEFAULT_SNAPSHOT_RETENTION,
+  apply = false,
+): Promise<SnapshotPruneResult> {
+  if (!Number.isInteger(keep) || keep < 1) throw new Error('Snapshot retention must be a positive integer.');
+  await ensureManagerHome();
+  assertPublishLocation();
+  const base = { directory: BUNDLE_DIR, active: null as string | null, keep, retained: [] as string[], toRemove: [] as string[], removed: [] as string[], dryRun: !apply };
+  const published = await publishedBundle();
+  if (!published) return { ...base, reason: 'No active published bundle; nothing was removed.' };
+  if (!published.id || published.id.includes('/') || published.id.includes('\\\\')) {
+    throw new Error(`Invalid active snapshot id: ${published.id || '(empty)'}`);
+  }
+  const active = published.id;
+  const root = await safePath(join(BUNDLE_DIR, '.snapshots'));
+  let entries;
+  try { entries = await readdir(root, { withFileTypes: true }); }
+  catch (error) {
+    if (errorCode(error) === 'ENOENT') throw new Error(`Active published snapshot is missing: ${active}; refusing to prune.`);
+    throw error;
+  }
+  const snapshots = entries.filter(entry => entry.isDirectory()).map(entry => entry.name);
+  if (!snapshots.includes(active)) throw new Error(`Active published snapshot is missing: ${active}; refusing to prune.`);
+  const retained = [active, ...descendingSnapshotIds(snapshots.filter(id => id !== active)).slice(0, keep - 1)];
+  const toRemove = snapshots.filter(id => !retained.includes(id));
+  const removed: string[] = [];
+  if (apply) {
+    for (const id of toRemove) {
+      await rm(await safePath(join(root, id)), { recursive: true, force: true });
+      removed.push(id);
+    }
+  }
+  return { directory: BUNDLE_DIR, active, keep, retained, toRemove, removed, dryRun: !apply };
+}
+
 /** Never recreate an explicitly configured publish directory on the boot disk when
  * its volume is missing: fail loudly instead of publishing where Pi is not
  * registered to read. A missing mount point such as /Volumes/disk leaves an
@@ -78,6 +129,10 @@ export function assertPublishLocation() {
   throw new Error(`Publish directory unavailable: ${PUBLISH_DIR}. Mount its volume, or point "pi-manager config publish-dir" elsewhere.`);
 }
 
+/** Publish a detached, immutable package snapshot for the next ordinary Pi start.
+ * The live Pi keeps its old files even if a staging profile is edited/deleted.
+ * External local packages are intentionally reference-only, not snapshotted.
+ */
 export async function publishBundle(profile: string | null): Promise<LoadedBundle> {
   await ensureManagerHome();
   assertPublishLocation();

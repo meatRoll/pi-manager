@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.3.3 — Old publication snapshots can be pruned
+
+### Features
+
+- `pi-manager prune [--keep N]` previews old publication snapshots; add `--yes` to remove them. The retention count includes the active snapshot, which is always protected, and cleanup refuses to proceed if the active snapshot is missing.
+- The default retention is two snapshots, while a larger `--keep N` preserves more rollback points. Publication itself does not delete history.
+
 ## v1.3.2 — The publish directory is remembered
 
 v1.3.1 could only redirect publications through an environment variable, so any
