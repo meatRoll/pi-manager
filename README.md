@@ -2,7 +2,7 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-**v1.4.0 — installed plugin versions are visible.** [Release notes](CHANGELOG.md) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
+**v1.5.0 — package downloads can use a managed proxy.** [Release notes](CHANGELOG.md) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
 
 A **Pi extension** for managing packages, skills, extensions, prompt templates, themes, and preset Markdown context **inside Pi**.
 
@@ -81,6 +81,34 @@ Then restart Pi. Inside Pi the same action lives in **More → Update pi-manager
 
 The GitHub repository is public. `package.json` remains `private: true` to prevent accidental npm publication: the npm name belongs to another project. **Do not use `npm install -g pi-manager` or `pi install npm:pi-manager`.** Do not also run `pi install git:github.com/meatRoll/pi-manager`: that registers a second copy of `/manager` next to the published bundle. The clone plus `install --yes` path above is the supported one.
 
+### Network proxy
+
+Package downloads, `npm view` inspection and self-update use the manager's proxy
+mode, saved in `~/.pi-manager/state.json`:
+
+- **System** (default): proxy variables already in Pi's environment; on macOS
+  also the HTTP/HTTPS/SOCKS proxy from Network settings.
+- **No proxy**: clears proxy variables for manager child processes and overrides
+  Git's `http.proxy` / `https.proxy`, so a global Git proxy cannot leak in.
+- **Custom**: an HTTP(S) or SOCKS URL, for example `http://127.0.0.1:7897` or
+  `socks5://127.0.0.1:7897`. It overrides ambient variables and Git config.
+
+Set it inside Pi from **More → Network proxy settings…**, or from the CLI:
+
+```bash
+pi-manager config proxy
+pi-manager config proxy system
+pi-manager config proxy none
+pi-manager config proxy custom http://127.0.0.1:7897
+```
+
+The mode applies to manager operations only: it does not rewrite Pi's own
+`httpProxy`, npm registry, or model-provider traffic. Existing `NO_PROXY` is
+preserved; otherwise localhost is bypassed by default. On platforms other than
+macOS, System uses the process environment, so use Custom if the OS proxy is not
+exported. npm downloads work best through an HTTP proxy; SOCKS is mainly useful
+for Git. No restart is required for package operations or self-update.
+
 ### Try without permanent registration
 
 ```bash
@@ -118,7 +146,7 @@ The footer is contextual: it lists only the keys that currently do something. `E
 - **Space** toggles the selected resource/package directly in staging. **Enter** previews a resource, or opens package actions. **E** edits an owned copy; **Del** deletes an owned copy after confirmation. External/package originals stay read-only.
 - **←→** or **Tab / Shift+Tab** changes category on the same screen. **/** searches (Enter finishes searching; Enter again opens). Each category keeps its selection and search after preview, editing, or toggling. **Esc** clears search first, then closes. Preview supports `↑↓` and `PgUp` / `PgDn`.
 - **A** adds to the current category; **P** publishes only after confirmation. **R** refreshes metadata after edits from another process. The terminal panel opens immediately; resource discovery and the full byte comparison run in the background. Rows become usable before that comparison finishes, and the header says **Checking publication…** until a result is known. It then marks unpublished changes or an unknown comparison instead of claiming the live session changed. Closing or switching cancels the read-only work. External local packages are references, not tracked historical copies.
-- **More** groups prompt templates, themes, preset management/default selection, package import, update-all, restore, logs, copy/delete, manager-only publication, and help.
+- **More** groups prompt templates, themes, preset management/default selection, package import, update-all, restore, logs, network proxy, copy/delete, manager-only publication, and help.
 - RPC clients receive the same flat resource list with explicit category/action dialogs; terminal-only shortcuts are not required. The first list waits only for resource metadata, not the full byte comparison. Because RPC cannot patch an open dialog, a completed check appears in the next dialog.
 - Package extensions display as `package-label · src/index.ts`, so identical entry filenames are distinguishable. Git labels follow the **configured repository** (for example `meatRoll/pi-image-gen`), not a possibly inherited upstream manifest name; non-GitHub hosts stay visible. npm labels use the configured package name, including its scope. Local packages with their own Git checkout use its `origin` repository (read locally, with no network access); otherwise they use the manifest name or configured path. Parent repositories and inherited manifest repository URLs are not used. Package lists use the same labels; raw manifest names remain available in package details. Standalone filenames are unchanged. These are display labels only, not renamed files, sources, or resource IDs.
 - Package-origin rows include the installed package version, for example `extensions · package · 1.0.0 · read-only`, so a stale install is visible before launch. Local checkouts without a manifest version show `local`; standalone and context rows stay unversioned.
@@ -270,7 +298,7 @@ pi-manager install --yes
 | `PI_MANAGER_SOURCE_AGENT_DIR` | Optional source agent directory for explicit package import; otherwise the current Pi agent or `~/.pi/agent`. |
 | `PI_MANAGER_EDITOR` | External editor for the legacy CLI only. In-Pi editing uses Pi's editor. |
 
-Network proxies are inherited; the manager does not rewrite npm registry or Pi proxy settings. The command requires an idle session and interactive Pi UI; an RPC client supporting native dialogs also works. Print/JSON mode does not open the manager. Opening or closing it makes no model call.
+Manager network proxy is configured from **More → Network proxy settings…** or `pi-manager config proxy`; it is separate from Pi's `httpProxy` and model-provider traffic. The command requires an idle session and interactive Pi UI; an RPC client supporting native dialogs also works. Print/JSON mode does not open the manager. Opening or closing it makes no model call.
 
 ## Development and tests
 

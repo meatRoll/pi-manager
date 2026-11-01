@@ -7,6 +7,7 @@ import { resolveSourcePath, packageEntries } from './core.js';
 import { getSettings, saveSettings, getMetadata, saveMetadata, withProfileLock, writeText, safePath, writeJson, isInside } from './storage.js';
 import { PACKAGE_STATE_KEY, sourceOf, packageState } from './package-state.js';
 import { prepareGeneration, recordGeneration, validateGeneration, runPackageWorker, generationPath, absoluteEntries, verifyOwnedTree } from './generations.js';
+import { networkEnvironment } from './proxy.js';
 export function setPackageEnabled(settings, metadata, source, enabled) {
     const entries = settings.packages || [];
     const index = entries.findIndex(entry => sourceOf(entry) === source);
@@ -99,7 +100,7 @@ export async function packageOperation(profile, command, source, options = {}) {
             if (output.length > 8 * 1024 * 1024)
                 output = '[earlier output truncated]\n' + output.slice(-8 * 1024 * 1024);
         };
-        const workerOptions = { ...options, onLog: record };
+        const workerOptions = { ...options, env: await networkEnvironment(options.env), onLog: record };
         try {
             let state = packageState(settings);
             let missingBaseline = [];
@@ -190,10 +191,11 @@ export async function inspectPackage(source) {
     if (!target.startsWith('npm:')) {
         return { kind: 'git', source: target, notice: 'Git source metadata is only available after download. Review this repository before installing.' };
     }
+    const env = await networkEnvironment();
     return new Promise((resolveInspect, reject) => {
         let stdout = '', stderr = '';
         const child = spawn('npm', ['view', target.slice(4), 'name', 'version', 'description', 'license', 'repository', 'pi', 'peerDependencies', '--json'], {
-            env: process.env, stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000,
+            env, stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000,
         });
         child.stdout.on('data', chunk => { stdout += chunk; });
         child.stderr.on('data', chunk => { stderr += chunk; });

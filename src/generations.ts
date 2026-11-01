@@ -76,7 +76,7 @@ export async function runPackageWorker(root: string, args: string[] = [], option
     const child = spawn(custom || process.execPath, custom ? args : [worker, ...args], {
       cwd: root, shell: false,
       ...(options.validate ? { timeout: 30000 } : {}),
-      env: { ...process.env, ...options.env, PI_CODING_AGENT_DIR: root,
+      env: { ...(options.env ?? process.env), PI_CODING_AGENT_DIR: root,
         PI_CODING_AGENT_SESSION_DIR: join(root, 'sessions'),
         ...(options.validate ? { PI_OFFLINE: '0', PI_MANAGER_VALIDATE_PACKAGES: '1', PI_MANAGER_ALLOW_MISSING: options.allowMissing ? '1' : '0' } : {}) },
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'],

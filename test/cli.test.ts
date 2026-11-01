@@ -41,6 +41,15 @@ test('help, error exit codes, explicit destructive consent', async () => {
   assert.equal(command(['resource', 'list', 'missing']).status, 1);
 });
 
+test('config reports and switches proxy modes', () => {
+  assert.match(ok(['config', 'proxy', 'none']), /Proxy: none/);
+  assert.match(ok(['config']), /proxy:\s+none/);
+  assert.match(ok(['config', 'proxy', 'custom', '127.0.0.1:7897']), /Proxy: custom http:\/\/127\.0\.0\.1:7897/);
+  assert.match(ok(['config', 'proxy']), /custom http:\/\/127\.0\.0\.1:7897/);
+  assert.equal(command(['config', 'proxy', 'custom', 'ftp://127.0.0.1:21']).status, 1);
+  assert.match(ok(['config', 'proxy', 'system']), /Proxy: system/);
+});
+
 test('local package lifecycle and resource inventory through real Pi, offline', sdk ? {} : { skip: 'Installed Pi SDK required' }, async () => {
   const source = join(temp, 'fixture');
   await mkdir(join(source, 'skills', 'demo'), { recursive: true });

@@ -51,6 +51,14 @@ export interface ManagerState {
   defaultProfile: string | null;
   /** Persisted standalone publish directory; PI_MANAGER_PUBLISH_DIR overrides it. */
   publishDir?: string;
+  /** Manager-side network proxy for package operations and self-update. */
+  proxy?: ProxySettings;
+}
+export type ProxyMode = 'none' | 'system' | 'custom';
+export interface ProxySettings {
+  mode: ProxyMode;
+  /** HTTP(S) or SOCKS URL; required when mode is 'custom'. */
+  url?: string;
 }
 export interface ProfileSummary { name: string; path: string; isDefault: boolean }
 export interface ConfiguredPackage {
@@ -112,6 +120,7 @@ export interface PiRunOptions extends RunOptions { piCommand?: string }
 export interface WorkerLog { code: number; output: string; truncated: boolean; error?: string }
 export interface WorkerOptions {
   cwd?: string;
+  /** Complete child environment; omitted means inherit process.env. */
   env?: NodeJS.ProcessEnv;
   piCommand?: string;
   onOutput?: (text: string) => void;

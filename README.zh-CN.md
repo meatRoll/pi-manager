@@ -2,7 +2,7 @@
 
 [English](README.md) | **简体中文**
 
-**v1.4.0 — 资源列表显示插件版本。** [版本说明](CHANGELOG.md#简体中文) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
+**v1.5.0 — 包下载可以走受管代理。** [版本说明](CHANGELOG.md#简体中文) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
 
 一个**在 Pi 里面使用的扩展**，管理插件包、Skills、Extensions、提示词模板、主题和预置 Markdown 上下文。
 
@@ -81,6 +81,26 @@ node ~/.pi-manager/manager/dist/index.js self-update --yes   # 从源码目录�
 
 GitHub 仓库公开；`package.json` 的 `private: true` 只防止误发布到 npm。npm 上同名包属于其他项目，**不要使用 `npm install -g pi-manager` 或 `pi install npm:pi-manager`**。也不要额外执行 `pi install git:github.com/meatRoll/pi-manager`：那会和已发布快照一起注册第二个 `/manager`。请使用上面的 clone + `install --yes`。
 
+### 网络代理
+
+包下载、`npm view` 检查和自更新使用管理器自己的代理模式，保存在
+`~/.pi-manager/state.json`：
+
+- **系统代理**（默认）：沿用 Pi 进程环境里的代理变量；macOS 上还会读取“网络”设置里的 HTTP/HTTPS/SOCKS 代理。
+- **不使用代理**：清除 manager 子进程的代理变量，并覆盖 Git 的 `http.proxy` / `https.proxy`，避免全局 Git 代理继续生效。
+- **自定义代理**：HTTP(S) 或 SOCKS URL，例如 `http://127.0.0.1:7897`、`socks5://127.0.0.1:7897`；会覆盖环境变量和 Git 配置。
+
+在 Pi 内打开 **More → Network proxy settings…**，或使用 CLI：
+
+```bash
+pi-manager config proxy
+pi-manager config proxy system
+pi-manager config proxy none
+pi-manager config proxy custom http://127.0.0.1:7897
+```
+
+代理只作用于 manager 发起的操作，不改 Pi 自己的 `httpProxy`、npm registry 或模型请求。已有 `NO_PROXY` 会保留；没有时默认绕过 localhost。非 macOS 平台的“系统代理”只读取进程环境，系统代理没有导出到环境时请用自定义。npm 下载最好使用 HTTP 代理，SOCKS 主要用于 Git。包操作和自更新不需要重启。
+
 ### 不注册，先试用
 
 ```bash
@@ -118,7 +138,7 @@ Space toggle · Enter preview · E edit · A add · P publish
 - **空格**直接启停所选资源/包，只改暂存。**Enter**直接预览资源，选中包则打开操作菜单。**E** 编辑管理器副本；**Del** 确认后删除副本。外部/包内原文件仍只读。
 - **←→** 或 **Tab / Shift+Tab** 在同一页切换分类。**/** 搜索（Enter 结束输入，再按一次打开）；每个分类在预览、编辑、启停后保留选中项和搜索条件。**Esc** 先清空搜索，再退出。预览支持 `↑↓`、`PgUp` / `PgDn`。
 - **A** 向当前分类添加；**P** 确认后发布。其他进程修改后按 **R** 刷新。终端面板先显示，资源发现与完整内容比较放在后台；资源列表先可操作，检查结束前标题显示 **Checking publication…**，之后再提示未发布修改或无法确定的状态，不冒充当前会话已生效。关闭或切换会取消只读检查。本地外部包只是引用，不追踪历史副本。
-- **More** 收拢模板、主题、预设管理/默认项、包导入、全部更新、恢复、日志、复制/删除、manager-only 发布及说明。
+- **More** 收拢模板、主题、预设管理/默认项、包导入、全部更新、恢复、日志、网络代理、复制/删除、manager-only 发布及说明。
 - RPC 客户端使用同样的扁平资源列表，通过明确的分类/操作对话框交互，不依赖终端快捷键。首个列表只等资源 metadata，不再等待完整内容比较；RPC 无法修改已经打开的对话框，检查结果会在下次对话框中显示。
 - 包内 Extension 显示为 `包标签 · src/index.ts`，便于区分同名入口。Git 包优先使用**实际配置的仓库**（如 `meatRoll/pi-image-gen`），不使用可能残留的上游 manifest 名称；非 GitHub 来源保留主机名。npm 包使用配置中的包名（保留 scope）；本地包若有独立 Git 仓库，则只读使用其 `origin` 仓库标签（不访问网络）；否则使用 manifest 名称或配置路径，不会借用父目录仓库或可能残留的 manifest 仓库 URL。包列表保持相同标签，原始 manifest 名称仍可在包详情中查看。独立文件名不变；这些只是显示标签，不会重命名文件、修改来源或改变资源 ID。
 - 包来源的资源行会显示已安装包版本（如 `extensions · package · 1.0.0 · read-only`），不用打开包菜单也能发现旧版本；没有 manifest 版本的本地包显示 `local`，独立资源与上下文不显示版本号。
@@ -270,7 +290,7 @@ pi-manager install --yes
 | `PI_MANAGER_SOURCE_AGENT_DIR` | 明确导入包时的可选来源 agent 目录；否则使用当前 Pi agent 或 `~/.pi/agent`。 |
 | `PI_MANAGER_EDITOR` | 仅供旧 CLI 外部编辑；Pi 内直接使用 Pi 编辑器。 |
 
-代理沿用进程环境，不改 npm registry 或 Pi proxy 配置。命令要求 agent 空闲，支持 Pi 交互 UI 或实现原生对话框的 RPC 客户端；print/JSON 模式不会打开管理器。打开、关闭管理器不调用模型。
+管理器网络代理在 **More → Network proxy settings…** 或 `pi-manager config proxy` 中设置，与 Pi 自己的 `httpProxy`、模型请求相互独立。命令要求 agent 空闲，支持 Pi 交互 UI 或实现原生对话框的 RPC 客户端；print/JSON 模式不会打开管理器。打开、关闭管理器不调用模型。
 
 ## 开发和测试
 

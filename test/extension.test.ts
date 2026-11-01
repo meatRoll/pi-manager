@@ -12,6 +12,7 @@ const core = await import('../src/core.js');
 const { inventory } = await import('../src/resources.js');
 const { BUNDLE_DIR, publishedBundle } = await import('../src/bundle.js');
 const { initialProfile } = await import('../src/pi-manager.js');
+const { getProxySettings, setProxySettings } = await import('../src/proxy.js');
 after(() => rm(temp, { recursive: true, force: true }));
 
 function harness() {
@@ -68,6 +69,20 @@ test('/manager creates a staging profile through native Pi dialogs and returns t
   assert.ok(h.titles[0].includes('pi-manager'));
   assert.ok(h.notes.every(note => note === 'Reading staging metadata…'));
   assert.ok(h.titles.some(title => title.startsWith('pi-manager / review / All')));
+});
+
+test('/manager switches network proxy modes and saves a custom URL', async () => {
+  const h = harness(); extension(h.pi);
+  h.selections.push('Switch preset', 'review', 'Tab: More', 'Network proxy settings', 'No proxy');
+  await h.run();
+  assert.deepEqual(await getProxySettings(), { mode: 'none' });
+
+  const custom = harness(); extension(custom.pi);
+  custom.selections.push('Switch preset', 'review', 'Tab: More', 'Network proxy settings', 'Custom proxy');
+  custom.inputs.push('127.0.0.1:7897');
+  await custom.run();
+  assert.deepEqual(await getProxySettings(), { mode: 'custom', url: 'http://127.0.0.1:7897' });
+  await setProxySettings({ mode: 'system' });
 });
 
 test('Pi editor context and publish are usable in the same session; native/global files are not copied', async () => {

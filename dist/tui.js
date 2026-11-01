@@ -6,6 +6,7 @@ import { errorCode, errorMessage } from './errors.js';
 import { listProfiles, getState, createProfile, copyProfile, deleteProfile, setDefaultProfile, profilePath, runPi, run } from './core.js';
 import { packageOperation, inspectPackage, togglePackage, packageVersions, rollbackPackages } from './packages.js';
 import { inventory, previewResource, toggleResource, importResource, createContext, writeResource, removeResource, parseResourceType, originLabel, resourceVersion } from './resources.js';
+import { displayProxy, proxySummary, setProxySettings } from './proxy.js';
 export async function editResource(profile, resource, ui) {
     const preview = await previewResource(profile, resource.id);
     if (preview.truncated)
@@ -171,6 +172,37 @@ export async function openTui() {
         if (result)
             await ui.view(result.entry.value, await readFile(join(profilePath(profile), '.operations', result.entry.value), 'utf8'));
     };
+    const proxyPage = async () => {
+        while (true) {
+            const current = await proxySummary();
+            const selected = await ui.select('Network proxy', [
+                { label: `System proxy${current.config.mode === 'system' ? ' (current)' : ''} — environment / system settings`, value: 'system' },
+                { label: `No proxy${current.config.mode === 'none' ? ' (current)' : ''}`, value: 'none' },
+                { label: `Custom proxy${current.config.url ? ` (${displayProxy(current.config.url)})` : ''}${current.config.mode === 'custom' ? ' (current)' : ''}…`, value: 'custom' },
+            ], `Current: ${current.label}`);
+            if (!selected)
+                return;
+            const mode = selected.entry.value;
+            if (mode === 'custom') {
+                const value = await ui.inputText('Custom proxy URL', current.config.url || 'http://127.0.0.1:7897');
+                if (!value)
+                    continue;
+                try {
+                    await setProxySettings({ mode: 'custom', url: value });
+                }
+                catch (error) {
+                    await ui.view('Proxy error', errorMessage(error));
+                    continue;
+                }
+            }
+            else {
+                await setProxySettings({ mode: mode, ...(current.config.url ? { url: current.config.url } : {}) });
+            }
+            const next = await proxySummary();
+            await ui.view('Network proxy', `${next.label}\n\nApplies to manager package operations, inspection and self-update; restart is not required.`);
+            return;
+        }
+    };
     const versionsPage = async (profile) => {
         const versions = await packageVersions(profile);
         const selected = await ui.select('Package generations', [
@@ -251,6 +283,7 @@ export async function openTui() {
             const state = await getState();
             const result = await ui.select('Profiles', [
                 ...profiles.map(profile => ({ label: `${profile.name === state.defaultProfile ? '★ ' : ''}${profile.name}`, detail: profile.path, profile })),
+                { label: 'Network proxy settings', value: 'proxy' },
                 { label: '+ Create profile', value: 'create' }, { label: 'Quit', value: 'quit' },
             ], 'Independent profiles. Default Pi and project .pi files are not managed.');
             if (!result || result.entry.value === 'quit')
@@ -258,6 +291,8 @@ export async function openTui() {
             await guard(async () => {
                 if (result.entry.profile)
                     await profilePage(result.entry.profile.name);
+                else if (result.entry.value === 'proxy')
+                    await proxyPage();
                 else {
                     const name = await ui.inputText('New profile', 'Letters, numbers, dots, underscores and hyphens');
                     if (name)

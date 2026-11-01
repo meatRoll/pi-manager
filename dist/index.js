@@ -12,6 +12,7 @@ import { installPiExtension } from './install-pi.js';
 import { migratePiPackages } from './migration.js';
 import { selfUpdate } from './self-update.js';
 import { configReport, changePublishDir } from './config.js';
+import { changeProxy } from './proxy.js';
 import { DEFAULT_SNAPSHOT_RETENTION, prunePublishedSnapshots } from './bundle.js';
 const HELP = `pi-manager ${VERSION} — Pi resource manager extension
 
@@ -50,6 +51,9 @@ Primary interface: type /manager INSIDE Pi. This CLI is optional/legacy.
   pi-manager config                             Show manager home, publish directory and its source
   pi-manager config publish-dir <path>          Save a publish directory for runs without the env var
   pi-manager config publish-dir --unset         Return to the default inside the manager home
+  pi-manager config proxy                       Show proxy mode and effective proxy
+  pi-manager config proxy none|system           Disable or inherit the system proxy
+  pi-manager config proxy custom <url>          Save a custom HTTP(S)/SOCKS proxy
   pi-manager prune [--keep N]                   Preview old publication snapshots to remove
   pi-manager prune [--keep N] --yes             Remove old snapshots, keeping the active and newest N-1
 
@@ -158,6 +162,8 @@ export async function main(args) {
     if (command === 'config') {
         if (!subcommand)
             return print(await configReport());
+        if (subcommand === 'proxy')
+            return print(await changeProxy(rest[0], rest[1]));
         if (subcommand !== 'publish-dir')
             throw new Error('Unknown config section. See --help.');
         const target = rest[0];

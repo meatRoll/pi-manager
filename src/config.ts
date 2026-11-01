@@ -3,6 +3,7 @@ import { canonicalLocation, MANAGER_HOME, PROFILES_DIR, PUBLISH_DIR, PUBLISH_DIR
 import { bundleDeclarations, staleBundleDeclarations } from './install-pi.js';
 import { publishLocationAvailable } from './bundle.js';
 import { sourcePiAgentDir } from './migration.js';
+import { proxyReport } from './proxy.js';
 
 const LABELS = {
   env: 'from PI_MANAGER_PUBLISH_DIR',
@@ -19,6 +20,7 @@ export async function configReport() {
     `manager home:  ${MANAGER_HOME}`,
     `profiles:      ${PROFILES_DIR}`,
     `publish dir:   ${PUBLISH_DIR} (${LABELS[PUBLISH_DIR_SOURCE]})`,
+    await proxyReport(),
   ];
   if (PUBLISH_DIR_SOURCE !== 'default' && !publishLocationAvailable()) {
     lines.push(`Unavailable: ${PUBLISH_DIR} is missing and publishing will refuse until its volume returns.`);

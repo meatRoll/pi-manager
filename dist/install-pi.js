@@ -6,6 +6,7 @@ import { publishBundle, publishedBundle, BUNDLE_DIR, assertPublishLocation } fro
 import { run } from './core.js';
 import { sourcePiAgentDir } from './migration.js';
 import { canonicalLocation, ensureManagerHome, rememberPublishDir } from './storage.js';
+import { networkEnvironment } from './proxy.js';
 import { errorMessage } from './errors.js';
 /** Pi can only fast-forward `git:` sources, so the manager installs itself as one.
  * `PI_MANAGER_SELF_SOURCE` overrides it (a local path works offline); `none`
@@ -65,12 +66,13 @@ export async function installPiExtension(acknowledged = false) {
         throw new Error('Pass --yes to register pi-manager in the current Pi agent settings. No other resources, credentials or sessions are copied.');
     await ensureManagerHome();
     const pi = process.env.PI_MANAGER_PI || 'pi';
+    const env = await networkEnvironment();
     const registered = [];
     const source = selfSource();
     // Register the manager itself first: the published snapshot only carries
     // resources, so a missing manager package would leave nothing to type.
     if (source !== 'none' && !await hasManagerPackage()) {
-        const code = await run(pi, ['install', source]);
+        const code = await run(pi, ['install', source], { env });
         if (code !== 0)
             throw new Error(`pi install ${source} exited ${code}`);
         registered.push(source);
@@ -79,7 +81,7 @@ export async function installPiExtension(acknowledged = false) {
     assertPublishLocation();
     await publishBundle((await publishedBundle())?.profile || null);
     const remembered = await rememberPublishDir();
-    const code = await run(pi, ['install', BUNDLE_DIR]);
+    const code = await run(pi, ['install', BUNDLE_DIR], { env });
     if (code !== 0)
         throw new Error(`pi install exited ${code}`);
     registered.push(BUNDLE_DIR);

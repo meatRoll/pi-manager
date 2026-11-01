@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.5.0 — Package downloads can use a managed proxy
+
+GitHub packages could fail when Pi was launched without shell proxy variables,
+while a stale global Git `http.proxy` could keep forcing a dead proxy even after
+the environment changed.
+
+### Features
+
+- New manager proxy modes: **System** (default; environment variables, plus the
+  HTTP/HTTPS/SOCKS proxy from macOS Network settings), **No proxy** (clears
+  ambient variables and overrides Git's `http.proxy` / `https.proxy`), and
+  **Custom** (an HTTP(S) or SOCKS URL that overrides both).
+- The mode applies to package add/update/remove workers, `npm view` inspection,
+  self-update, and installer package operations. It does not rewrite Pi's own
+  `httpProxy`, npm registry, or model-provider traffic.
+- Set it from **More → Network proxy settings…**, the legacy TUI, or
+  `pi-manager config proxy [none|system|custom <url>]`. Existing `NO_PROXY` is
+  preserved; localhost is bypassed by default. Changes apply without restart.
+
 ## v1.4.0 — Installed plugin versions are visible
 
 Package-origin rows stopped at `extensions · package · read-only`, so a stale
@@ -104,6 +123,12 @@ The first stable release of **pi-manager**, a resource manager that runs inside 
 - 82 automated tests covering the dashboard, cancellation, migration, source-aware labels, publication, package recovery, isolation, and real Pi integration without model calls.
 
 ## 简体中文
+
+### v1.5.0 — 包下载可走受管代理
+
+- 新增**系统代理**、**不使用代理**、**自定义代理**三种模式。系统模式在 macOS 上读取“网络”设置，其他平台读取环境变量。
+- 作用于包的安装/更新/删除、`npm view` 检查、自更新和安装器；不修改 Pi 自己的 `httpProxy` 或模型请求。
+- 在 **More → Network proxy settings…** 或 `pi-manager config proxy ...` 中设置，无需重启。
 
 ### v1.0.0 — 首个正式版本
 

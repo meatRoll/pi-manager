@@ -10,6 +10,7 @@ import { choose, view, working } from './pi-ui.js';
 import { dashboard, newDashboardState } from './dashboard.js';
 import { createPublicationInspector } from './publication-status.js';
 import { errorCode, errorMessage } from './errors.js';
+import { displayProxy, proxySummary, setProxySettings } from './proxy.js';
 export function initialProfile(profiles, defaultProfile, loaded, published) {
     return [defaultProfile, loaded, published, profiles[0]?.name].find(name => name && profiles.some(profile => profile.name === name)) || undefined;
 }
@@ -172,6 +173,36 @@ export async function openManager(ctx, loaded) {
         if (file)
             await view(ctx, file, await readFile(join(profilePath(profile), '.operations', file), 'utf8'));
     };
+    const proxyPage = async () => {
+        while (true) {
+            const current = await proxySummary();
+            const mode = await choose(ctx, `Network proxy — ${current.label}`, [
+                { label: `System proxy${current.config.mode === 'system' ? ' (current)' : ''} — environment / system settings`, value: 'system' },
+                { label: `No proxy${current.config.mode === 'none' ? ' (current)' : ''}`, value: 'none' },
+                { label: `Custom proxy${current.config.url ? ` (${displayProxy(current.config.url)})` : ''}${current.config.mode === 'custom' ? ' (current)' : ''}…`, value: 'custom' },
+            ]);
+            if (!mode)
+                return;
+            if (mode === 'custom') {
+                const value = await ctx.ui.input('Custom proxy URL', current.config.url || 'http://127.0.0.1:7897');
+                if (!value)
+                    continue;
+                try {
+                    await setProxySettings({ mode: 'custom', url: value });
+                }
+                catch (error) {
+                    ctx.ui.notify(errorMessage(error), 'error');
+                    continue;
+                }
+            }
+            else {
+                await setProxySettings({ mode, ...(current.config.url ? { url: current.config.url } : {}) });
+            }
+            const next = await proxySummary();
+            ctx.ui.notify(`Network proxy: ${next.label}. Applies to manager package operations, inspection and self-update; restart is not required.`, 'info');
+            return;
+        }
+    };
     const migrate = async (profile) => {
         const source = sourcePiAgentDir();
         if (!await ctx.ui.confirm('Import current Pi packages?', `Read-only source: ${source}\nCopies installed npm/Git trees into this empty staging profile; skips the manager bundle. External local packages stay references. No downloads or extension execution. Do not update source packages concurrently. Original declarations remain active: verify the import, then explicitly remove duplicates before using the published preset.`))
@@ -220,6 +251,7 @@ export async function openManager(ctx, loaded) {
         { id: 'profiles', label: 'Manage / switch presets' },
         { id: 'migrate', label: 'Import packages from current Pi' }, { id: 'update', label: 'Update all packages' },
         { id: 'versions', label: 'Package generations / restore' }, { id: 'logs', label: 'Package operation logs' },
+        { id: 'proxy', label: 'Network proxy settings…' },
         { id: 'self-update', label: 'Update pi-manager from GitHub (git pull)' },
         { id: 'copy', label: 'Copy profile' }, { id: 'default', label: 'Set as default manager preset' },
         { id: 'delete-profile', label: 'Delete staging profile' },
@@ -353,6 +385,8 @@ export async function openManager(ctx, loaded) {
                 await versionsPage(profile);
             else if (action.id === 'logs')
                 await logsPage(profile);
+            else if (action.id === 'proxy')
+                await proxyPage();
             else if (action.id === 'self-update')
                 await guard(async () => {
                     if (!await ctx.ui.confirm('Update pi-manager from GitHub?', 'Runs git pull --ff-only in the manager checkout, then republishes so the next Pi start still loads the same installation. Packages, resources and presets are not touched. Restart Pi afterwards.'))
