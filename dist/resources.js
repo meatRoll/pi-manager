@@ -32,6 +32,11 @@ export function resourceOrigin(metadata) {
 export function originLabel(origin) {
     return origin === 'global' ? 'user-level' : origin;
 }
+/** Package resources carry the installed version so a stale plugin is visible
+ * before launch. Local checkouts without a manifest version read as 'local'. */
+export function resourceVersion(resource) {
+    return resource.origin === 'package' ? resource.version || 'local' : undefined;
+}
 export async function inventory(profile, options = {}) {
     options.signal?.throwIfAborted();
     const root = await assertProfile(profile);
@@ -86,6 +91,7 @@ export async function inventory(profile, options = {}) {
             resources.push({
                 id: resourceId(type, path, source), type, path, name, displayName,
                 enabled, origin, source, packageRoot: sourceMeta.packageRoot,
+                version: origin === 'package' ? pkg?.version : undefined,
                 owned: origin === 'standalone' && isInside(join(root, 'resources', type), path),
             });
         }

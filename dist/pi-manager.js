@@ -1,7 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { listProfiles, createProfile, copyProfile, deleteProfile, profilePath, getState, setDefaultProfile, resolveSourcePath } from './core.js';
-import { inventory, importResource, previewResource, writeResource, removeResource, createContext, toggleResource, originLabel } from './resources.js';
+import { inventory, importResource, previewResource, writeResource, removeResource, createContext, toggleResource, originLabel, resourceVersion } from './resources.js';
 import { packageOperation, inspectPackage, togglePackage, packageVersions, rollbackPackages } from './packages.js';
 import { migratePiPackages, sourcePiAgentDir } from './migration.js';
 import { selfUpdate } from './self-update.js';
@@ -240,11 +240,14 @@ export async function openManager(ctx, loaded) {
             current = undefined;
             status = 'checking';
         }
-        const resourceRows = (type) => (current?.resources || []).filter(resource => !type || resource.type === type).map(resource => ({
-            id: `resource:${resource.id}`, label: `[${resource.enabled ? 'x' : ' '}] ${resource.displayName}`,
-            detail: `${resource.type} · ${originLabel(resource.origin)}${resource.owned ? ' · owned' : ' · read-only'}`,
-            toggle: resource.origin !== 'global', editable: resource.owned, deletable: resource.owned,
-        }));
+        const resourceRows = (type) => (current?.resources || []).filter(resource => !type || resource.type === type).map(resource => {
+            const version = resourceVersion(resource);
+            return {
+                id: `resource:${resource.id}`, label: `[${resource.enabled ? 'x' : ' '}] ${resource.displayName}`,
+                detail: `${resource.type} · ${originLabel(resource.origin)}${version ? ` · ${version}` : ''}${resource.owned ? ' · owned' : ' · read-only'}`,
+                toggle: resource.origin !== 'global', editable: resource.owned, deletable: resource.owned,
+            };
+        });
         const makeModel = () => ({
             profile: profile, loading: `loaded: ${loaded?.profile || 'manager only'} · next start: ${published?.profile || 'manager only'}`,
             publication: status === 'checking' ? 'Checking publication in background… Current session unchanged'

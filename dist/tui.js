@@ -5,7 +5,7 @@ import { Terminal } from './terminal.js';
 import { errorCode, errorMessage } from './errors.js';
 import { listProfiles, getState, createProfile, copyProfile, deleteProfile, setDefaultProfile, profilePath, runPi, run } from './core.js';
 import { packageOperation, inspectPackage, togglePackage, packageVersions, rollbackPackages } from './packages.js';
-import { inventory, previewResource, toggleResource, importResource, createContext, writeResource, removeResource, parseResourceType, originLabel } from './resources.js';
+import { inventory, previewResource, toggleResource, importResource, createContext, writeResource, removeResource, parseResourceType, originLabel, resourceVersion } from './resources.js';
 export async function editResource(profile, resource, ui) {
     const preview = await previewResource(profile, resource.id);
     if (preview.truncated)
@@ -92,11 +92,12 @@ export async function openTui() {
         }
     };
     const resourcePage = async (profile, resource) => {
+        const version = resourceVersion(resource);
         const result = await ui.select(resource.displayName, [
             { label: 'Preview', value: 'preview' },
             ...(resource.origin === 'global' ? [] : [{ label: resource.enabled ? 'Disable' : 'Enable', value: 'toggle' }]),
             ...(resource.owned ? [{ label: 'Edit with external editor', value: 'edit' }, { label: 'Delete owned copy', value: 'delete' }] : []),
-        ], `${resource.type} · ${originLabel(resource.origin)} · ${resource.owned ? 'manager-owned' : 'external read-only'}\n${resource.path}`);
+        ], `${resource.type} · ${originLabel(resource.origin)}${version ? ` · ${version}` : ''} · ${resource.owned ? 'manager-owned' : 'external read-only'}\n${resource.path}`);
         if (!result)
             return;
         await guard(async () => {
@@ -121,7 +122,10 @@ export async function openTui() {
             const result = await ui.select(type || 'All resources', [
                 { label: '+ Import local resource', value: 'import' },
                 ...(type === 'context' ? [{ label: '+ Create context', value: 'create' }] : []),
-                ...entries.map(resource => ({ label: `[${resource.enabled ? 'x' : ' '}] ${resource.displayName}`, detail: `${resource.type} · ${originLabel(resource.origin)}${resource.owned ? ' · owned' : ''}`, resource, toggle: resource.origin !== 'global' })),
+                ...entries.map(resource => {
+                    const version = resourceVersion(resource);
+                    return { label: `[${resource.enabled ? 'x' : ' '}] ${resource.displayName}`, detail: `${resource.type} · ${originLabel(resource.origin)}${version ? ` · ${version}` : ''}${resource.owned ? ' · owned' : ''}`, resource, toggle: resource.origin !== 'global' };
+                }),
             ], 'Space toggles next-launch enablement. Package/external originals are read-only.');
             if (!result)
                 return;

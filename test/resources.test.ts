@@ -42,6 +42,10 @@ test('SDK inventory finds manifest resources without executing extension code', 
   const current = await resources.inventory('inventory');
   assert.equal(current.packages[0].version, '1.0.0');
   assert.equal(current.resources.filter(r => r.origin === 'package').length, 4);
+  assert.ok(current.resources.filter(r => r.origin === 'package').every(r => r.version === '1.0.0'));
+  assert.equal(resources.resourceVersion({ origin: 'package', version: '1.0.0' }), '1.0.0');
+  assert.equal(resources.resourceVersion({ origin: 'package' }), 'local');
+  assert.equal(resources.resourceVersion({ origin: 'standalone' }), undefined);
   const skill = expectDefined(current.resources.find(r => r.type === 'skills'));
   assert.equal(skill.packageRoot, source);
   assert.equal(skill.owned, false);
@@ -90,6 +94,7 @@ test('extension display labels distinguish packages and paths without changing n
   assert.equal(at(noManifest).displayName, `${noManifest} · .`);
   assert.equal(at(owned).displayName, 'handoff.ts');
   assert.equal(at(owned).owned, true);
+  assert.equal(at(owned).version, undefined);
   assert.equal(a.id, createHash('sha256').update(`extensions\0${alpha}\0${a.path}`).digest('hex').slice(0, 12));
   assert.equal((await resources.previewResource('labels', a.id)).text, 'throw new Error("MUST NOT EXECUTE FOR LABELS");');
   assert.equal(await readFile(settingsPath, 'utf8'), before); // labels are read-only metadata
@@ -125,6 +130,7 @@ test('local Git labels follow origin without changing source, IDs, filters or ex
   assert.equal(current.packages[0].displayName, 'meatRoll/pi-todos');
   assert.equal(current.packages[0].name, '@upstream/todos');
   assert.equal(item.displayName, 'meatRoll/pi-todos · index.ts');
+  assert.equal(item.version, undefined);
   assert.equal(item.name, 'index.ts'); assert.equal(item.path, join(source, 'index.ts')); assert.equal(item.owned, false);
   assert.equal(item.id, resources.resourceId('extensions', item.path, source));
   assert.equal(await readFile(settingsPath, 'utf8'), before);

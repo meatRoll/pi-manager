@@ -95,6 +95,8 @@ export interface Resource {
   origin: 'package' | 'standalone' | 'global';
   source: string;
   packageRoot?: string;
+  /** Installed package version when origin is 'package'. */
+  version?: string;
   owned: boolean;
 }
 export interface Inventory {

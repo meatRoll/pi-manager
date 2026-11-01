@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.4.0 — Installed plugin versions are visible
+
+Package-origin rows stopped at `extensions · package · read-only`, so a stale
+extension looked identical to a current one.
+
+### Features
+
+- Dashboard and standalone TUI resource rows now include the installed package
+  version, for example `extensions · package · 1.0.0 · read-only`. Local
+  checkouts without a manifest version show `local`; standalone and context
+  files remain unversioned.
+- The version comes from the staging profile inventory, matching the Packages
+  tab, so it describes what the next publication would load rather than the
+  currently running session.
+
 ## v1.3.3 — Old publication snapshots can be pruned
 
 ### Features

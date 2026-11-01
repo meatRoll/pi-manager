@@ -117,13 +117,14 @@ test('native panel labels local Git packages by origin and keeps read-only rows 
   execFileSync('git', ['-C', source, 'init'], { stdio: 'pipe' });
   execFileSync('git', ['-C', source, 'config', '--local', 'remote.origin.url', 'https://github.com/meatRoll/pi-todos.git'], { stdio: 'pipe' });
   const configBefore = await readFile(join(source, '.git/config'), 'utf8');
-  await writeFile(join(source, 'package.json'), JSON.stringify({ name: 'same-index', pi: { extensions: ['./index.js'] } }));
+  await writeFile(join(source, 'package.json'), JSON.stringify({ name: 'same-index', version: '2.4.1', pi: { extensions: ['./index.js'] } }));
   await writeFile(join(source, 'index.js'), 'throw new Error("must not execute for panel");');
   const settings = await core.getSettings('package-panel'); settings.packages = [{ source, skills: [], extensions: ['+index.js'] }];
   await core.saveSettings('package-panel', settings);
   const h = host(); const running = openManager(h.ctx);
   let panel = await h.wait('meatRoll/pi-todos · index.js');
   assert.ok(panel.render(120).some(line => line.includes('[x] meatRoll/pi-todos · index.js')));
+  assert.ok(panel.render(120).some(line => line.includes('extensions · package · 2.4.1 · read-only')));
   const before = await readFile(join(core.profilePath('package-panel'), 'settings.json'), 'utf8');
   panel.handleInput!('e'); panel.handleInput!('\x1b[3~');
   assert.equal(h.components.length, 1); assert.equal(h.confirms.length, 0); assert.equal(h.editorTitles.length, 0);

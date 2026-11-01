@@ -2,7 +2,7 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-**v1.3.0 — the manager installs as its own package.** [Release notes](CHANGELOG.md) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
+**v1.4.0 — installed plugin versions are visible.** [Release notes](CHANGELOG.md) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
 
 A **Pi extension** for managing packages, skills, extensions, prompt templates, themes, and preset Markdown context **inside Pi**.
 
@@ -104,7 +104,7 @@ Unpublished changes · P publish for next start
 
 [All]  Extensions  Skills  Context  Packages  More
 
-[x] meatRoll/pi-inspect-image · src/index.ts   extensions · package
+[x] meatRoll/pi-inspect-image · src/index.ts   extensions · package · 1.0.0 · read-only
 [x] handoff.ts                             extensions · standalone · owned
 [x] pptx-preview                           skills · standalone · owned
 [x] APPEND_SYSTEM                          context · standalone · owned
@@ -121,6 +121,7 @@ The footer is contextual: it lists only the keys that currently do something. `E
 - **More** groups prompt templates, themes, preset management/default selection, package import, update-all, restore, logs, copy/delete, manager-only publication, and help.
 - RPC clients receive the same flat resource list with explicit category/action dialogs; terminal-only shortcuts are not required. The first list waits only for resource metadata, not the full byte comparison. Because RPC cannot patch an open dialog, a completed check appears in the next dialog.
 - Package extensions display as `package-label · src/index.ts`, so identical entry filenames are distinguishable. Git labels follow the **configured repository** (for example `meatRoll/pi-image-gen`), not a possibly inherited upstream manifest name; non-GitHub hosts stay visible. npm labels use the configured package name, including its scope. Local packages with their own Git checkout use its `origin` repository (read locally, with no network access); otherwise they use the manifest name or configured path. Parent repositories and inherited manifest repository URLs are not used. Package lists use the same labels; raw manifest names remain available in package details. Standalone filenames are unchanged. These are display labels only, not renamed files, sources, or resource IDs.
+- Package-origin rows include the installed package version, for example `extensions · package · 1.0.0 · read-only`, so a stale install is visible before launch. Local checkouts without a manifest version show `local`; standalone and context rows stay unversioned.
 - Skill imports select a directory containing `SKILL.md`. Resource imports copy files, so editing a manager-owned copy does not edit the original.
 - User-level resources that Pi discovers on its own (for example `~/.agents/skills`) appear as `user-level · read-only`. They cannot be toggled or edited from a preset, and publication never exports them: Pi loads them in every session, so the snapshot stays self-contained.
 - Package sources accept `npm:name@version`, `git:github.com/owner/repo@ref`, and local paths. Local packages remain external references: no dependency installation, copying, or deletion of their original directories.

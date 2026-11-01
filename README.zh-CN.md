@@ -2,7 +2,7 @@
 
 [English](README.md) | **简体中文**
 
-**v1.3.0 — 管理器作为独立包安装。** [版本说明](CHANGELOG.md#简体中文) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
+**v1.4.0 — 资源列表显示插件版本。** [版本说明](CHANGELOG.md#简体中文) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
 
 一个**在 Pi 里面使用的扩展**，管理插件包、Skills、Extensions、提示词模板、主题和预置 Markdown 上下文。
 
@@ -104,7 +104,7 @@ Unpublished changes · P publish for next start
 
 [All]  Extensions  Skills  Context  Packages  More
 
-[x] meatRoll/pi-inspect-image · src/index.ts   extensions · package
+[x] meatRoll/pi-inspect-image · src/index.ts   extensions · package · 1.0.0 · read-only
 [x] handoff.ts                             extensions · standalone · owned
 [x] pptx-preview                           skills · standalone · owned
 [x] APPEND_SYSTEM                          context · standalone · owned
@@ -121,6 +121,7 @@ Space toggle · Enter preview · E edit · A add · P publish
 - **More** 收拢模板、主题、预设管理/默认项、包导入、全部更新、恢复、日志、复制/删除、manager-only 发布及说明。
 - RPC 客户端使用同样的扁平资源列表，通过明确的分类/操作对话框交互，不依赖终端快捷键。首个列表只等资源 metadata，不再等待完整内容比较；RPC 无法修改已经打开的对话框，检查结果会在下次对话框中显示。
 - 包内 Extension 显示为 `包标签 · src/index.ts`，便于区分同名入口。Git 包优先使用**实际配置的仓库**（如 `meatRoll/pi-image-gen`），不使用可能残留的上游 manifest 名称；非 GitHub 来源保留主机名。npm 包使用配置中的包名（保留 scope）；本地包若有独立 Git 仓库，则只读使用其 `origin` 仓库标签（不访问网络）；否则使用 manifest 名称或配置路径，不会借用父目录仓库或可能残留的 manifest 仓库 URL。包列表保持相同标签，原始 manifest 名称仍可在包详情中查看。独立文件名不变；这些只是显示标签，不会重命名文件、修改来源或改变资源 ID。
+- 包来源的资源行会显示已安装包版本（如 `extensions · package · 1.0.0 · read-only`），不用打开包菜单也能发现旧版本；没有 manifest 版本的本地包显示 `local`，独立资源与上下文不显示版本号。
 - 导入 Skill 选择包含 `SKILL.md` 的目录。导入资源会复制文件，之后编辑管理器副本不改原文件。
 - Pi 自己发现的用户级资源（例如 `~/.agents/skills`）显示为 `user-level · read-only`：不能在预设里启停或编辑，发布时也不导出——Pi 每次启动都会自己加载，这样快照保持自包含。
 - 包来源支持 `npm:name@version`、`git:github.com/owner/repo@ref`、本地路径。本地包是**外部引用**，不复制、不安装依赖、不删除其原目录。
