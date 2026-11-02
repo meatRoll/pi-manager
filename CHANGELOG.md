@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.5.1 — A newer publication no longer breaks /manager
+
+A build that publishes format 2 (package declarations) left this version unable to
+read the active export, so `/manager` failed with "Invalid pi-manager export".
+
+### Fixes
+
+- Both publication readers accept format 1 and format 2 exports, as long as the
+  binding names this manager home and a usable snapshot id. Unknown fields are
+  ignored rather than rejected.
+- Publishing refuses to overwrite a format this build cannot write, so the
+  declarations a newer publication installed are never silently dropped.
+  `install --yes` still registers both packages and reports that the existing
+  publication was left untouched, and self-update surfaces the same reason.
+
 ## v1.5.0 — Package downloads can use a managed proxy
 
 GitHub packages could fail when Pi was launched without shell proxy variables,

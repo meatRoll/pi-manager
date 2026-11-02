@@ -10,13 +10,21 @@ import { getSettings, getMetadata } from './core.js';
 import { errorCode } from './errors.js';
 import { VERSION } from './version.js';
 export const BUNDLE_DIR = PUBLISH_DIR;
+/** Accept any export a newer build could publish, but only if it actually
+ * describes this manager home and names a snapshot in a usable form. */
+function isLoadedBundle(value, managerHome) {
+    const candidate = value;
+    return (candidate?.format === 1 || candidate?.format === 2)
+        && candidate.managerHome === managerHome
+        && typeof candidate.id === 'string' && candidate.id.length > 0;
+}
 /** Startup binding for the manager package itself. Any unreadable or malformed
  * export means "no published preset yet"; the manager can still run and publish.
  */
 export function publishedBundleSync() {
     try {
         const value = JSON.parse(readFileSync(join(BUNDLE_DIR, 'package.json'), 'utf8'));
-        return value.piManager?.format === 1 && value.piManager.managerHome === MANAGER_HOME ? value.piManager : null;
+        return isLoadedBundle(value.piManager, MANAGER_HOME) ? value.piManager : null;
     }
     catch {
         return null;
@@ -25,7 +33,7 @@ export function publishedBundleSync() {
 export async function publishedBundle() {
     try {
         const value = await readJson(await safePath(join(BUNDLE_DIR, 'package.json')));
-        if (value.piManager?.format !== 1 || value.piManager.managerHome !== MANAGER_HOME)
+        if (!isLoadedBundle(value.piManager, MANAGER_HOME))
             throw new Error('Invalid pi-manager export');
         return value.piManager;
     }
@@ -119,6 +127,14 @@ export function assertPublishLocation() {
 export async function publishBundle(profile) {
     await ensureManagerHome();
     assertPublishLocation();
+    // A newer build may publish a format this one cannot write. Overwriting it
+    // would silently drop whatever that format carries (for example package
+    // declarations), so refuse instead. An unreadable manifest is not protected:
+    // publishing over it repairs the export.
+    const existing = await publishedBundle().catch(() => null);
+    if (existing && existing.format > 1) {
+        throw new Error(`The active publication uses format ${existing.format}, which this build cannot rewrite. Update the manager instead of republishing, or publish with the build that produced it.`);
+    }
     return profile ? withProfileLock(profile, () => buildBundle(profile)) : buildBundle(null);
 }
 async function buildBundle(profile) {

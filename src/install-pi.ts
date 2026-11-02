@@ -67,9 +67,12 @@ export async function installPiExtension(acknowledged = false): Promise<void> {
     if (code !== 0) throw new Error(`pi install ${source} exited ${code}`);
     registered.push(source);
   }
-  // Refresh the published resources without dropping the chosen preset.
+  // Refresh the published resources without dropping the chosen preset. A build
+  // that cannot rewrite the active export still registers both packages.
   assertPublishLocation();
-  await publishBundle((await publishedBundle())?.profile || null);
+  let republishWarning: string | null = null;
+  try { await publishBundle((await publishedBundle())?.profile || null); }
+  catch (error) { republishWarning = `Left the existing publication untouched: ${errorMessage(error)}`; }
   const remembered = await rememberPublishDir();
   const code = await run(pi, ['install', BUNDLE_DIR], { env });
   if (code !== 0) throw new Error(`pi install exited ${code}`);
@@ -78,6 +81,7 @@ export async function installPiExtension(acknowledged = false): Promise<void> {
   console.log([
     `Registered Pi packages: ${registered.join(', ')}`,
     ...(remembered ? [`Saved ${remembered} as the publish directory for future runs.`] : []),
+    ...(republishWarning ? [republishWarning] : []),
     ...(stale.length ? [`Remove the superseded declaration${stale.length > 1 ? 's' : ''}: pi remove ${stale.map(item => resolve(sourcePiAgentDir(), item)).join(' ')}`] : []),
     registered.some(item => item === BUNDLE_DIR) ? `Published resources stay in ${BUNDLE_DIR}; update the manager with "pi update".` : '',
     'Restart Pi, then type /manager. No separate pi-manager process is needed.',

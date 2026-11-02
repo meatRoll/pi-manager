@@ -13,11 +13,16 @@ import type { PiResourceType, Resource, ResourceType } from './types.js';
 
 export const BUNDLE_DIR = PUBLISH_DIR;
 export interface LoadedBundle {
-  format: 1;
+  /** 1: every resource is copied into the snapshot. 2: package resources are
+   * declared and installed by the publication. Reading 2 matters because a newer
+   * build may publish one; this build must not fail to start on it. */
+  format: 1 | 2;
   id: string;
   profile: string | null;
   managerHome: string;
   contexts: { name: string; content: string }[];
+  /** Newer fields are read through untouched, never invented here. */
+  [key: string]: unknown;
 }
 interface BundleManifest {
   name: string;
@@ -28,20 +33,29 @@ interface BundleManifest {
   piManager: LoadedBundle;
 }
 
+/** Accept any export a newer build could publish, but only if it actually
+ * describes this manager home and names a snapshot in a usable form. */
+function isLoadedBundle(value: unknown, managerHome: string): value is LoadedBundle {
+  const candidate = value as LoadedBundle | undefined;
+  return (candidate?.format === 1 || candidate?.format === 2)
+    && candidate.managerHome === managerHome
+    && typeof candidate.id === 'string' && candidate.id.length > 0;
+}
+
 /** Startup binding for the manager package itself. Any unreadable or malformed
  * export means "no published preset yet"; the manager can still run and publish.
  */
 export function publishedBundleSync(): LoadedBundle | null {
   try {
     const value = JSON.parse(readFileSync(join(BUNDLE_DIR, 'package.json'), 'utf8')) as BundleManifest;
-    return value.piManager?.format === 1 && value.piManager.managerHome === MANAGER_HOME ? value.piManager : null;
+    return isLoadedBundle(value.piManager, MANAGER_HOME) ? value.piManager : null;
   } catch { return null; }
 }
 
 export async function publishedBundle(): Promise<LoadedBundle | null> {
   try {
-    const value = await readJson<BundleManifest>(await safePath(join(BUNDLE_DIR, 'package.json')));
-    if (value.piManager?.format !== 1 || value.piManager.managerHome !== MANAGER_HOME) throw new Error('Invalid pi-manager export');
+    const value = await readJson<BundleManifest>(await safePath(join(BUNDLE_DIR, 'package.json'))) as BundleManifest;
+    if (!isLoadedBundle(value.piManager, MANAGER_HOME)) throw new Error('Invalid pi-manager export');
     return value.piManager;
   } catch (error) { if (errorCode(error) === 'ENOENT') return null; throw error; }
 }
@@ -136,6 +150,14 @@ export function assertPublishLocation() {
 export async function publishBundle(profile: string | null): Promise<LoadedBundle> {
   await ensureManagerHome();
   assertPublishLocation();
+  // A newer build may publish a format this one cannot write. Overwriting it
+  // would silently drop whatever that format carries (for example package
+  // declarations), so refuse instead. An unreadable manifest is not protected:
+  // publishing over it repairs the export.
+  const existing = await publishedBundle().catch(() => null);
+  if (existing && existing.format > 1) {
+    throw new Error(`The active publication uses format ${existing.format}, which this build cannot rewrite. Update the manager instead of republishing, or publish with the build that produced it.`);
+  }
   return profile ? withProfileLock(profile, () => buildBundle(profile)) : buildBundle(null);
 }
 
