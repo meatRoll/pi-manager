@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.6.0 — Publications declare packages instead of copying them
+
+A snapshot used to flatten every package resource into a copied file path, which
+lost the declaring repository: labels decayed from `owner/repo:path` to a bare
+filename, package grouping disappeared, and `pi update` could no longer reach
+them. Publication now exports **declarations**, format 2.
+
+### Features
+
+- Publishing writes the preset's packages into Pi's agent settings through Pi's
+  public settings manager, pinning Git sources to the exact commit of the active
+  package generation and npm sources to the installed version. Resource filters
+  and the settings order are preserved, and declarations a previous publication
+  installed are replaced instead of being duplicated.
+- Resources the preset owns, plus any package that cannot be pinned (a checkout
+  without Git history, an unrecognized source), are still copied into the
+  detached snapshot, so a publication never drops resources.
+- Manager-only publication removes the declarations the previous publication
+  installed and leaves every other declaration untouched.
+- The dashboard compares pinned refs as well as files, so a moved commit reads as
+  an unpublished change, and the publish confirmation says how many declarations
+  will be applied.
+
+### Fixes
+
+- Publishing still refuses to overwrite a publication format newer than this build
+  can write, but a format it can produce is now read and rewritten normally.
+
 ## v1.5.1 — A newer publication no longer breaks /manager
 
 A build that publishes format 2 (package declarations) left this version unable to

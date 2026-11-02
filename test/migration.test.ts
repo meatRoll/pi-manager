@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, realpath, mkdir, writeFile, readFile, readdir, rm, symlink, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
 
 const temp = await realpath(await mkdtemp(join(tmpdir(), 'pi-manager-migration-')));
 process.env.PI_MANAGER_HOME = join(temp, 'manager');
@@ -35,7 +36,13 @@ test('import six declarations offline, preserve filters and originals, skip mana
   await packageAt(npm, 'one');
   await writeFile(join(source, 'npm/package.json'), JSON.stringify({ name: 'source', dependencies: { one: '1.0.0' } }));
   const gitSources = ['git:github.com/acme/two', 'https://github.com/acme/three', 'git:https://github.com/acme/four', 'git:github.com/acme/five'];
-  for (const name of ['two', 'three', 'four', 'five']) await packageAt(join(source, 'git/github.com/acme', name), `@upstream/${name}`);
+  for (const name of ['two', 'three', 'four', 'five']) {
+    const checkout = join(source, 'git/github.com/acme', name);
+    await packageAt(checkout, `@upstream/${name}`);
+    for (const args of [['init'], ['add', '.'], ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-m', name]]) {
+      execFileSync('git', ['-C', checkout, ...args], { stdio: 'pipe' });
+    }
+  }
   await packageAt(external, 'local-tool');
   const managerDeclaration = relative(source, BUNDLE_DIR);
   const npmEntry = { source: 'npm:one', skills: [], extensions: ['+index.js'] };
@@ -94,9 +101,21 @@ test('import six declarations offline, preserve filters and originals, skip mana
   await publishBundle('mine');
   const manifest = JSON.parse(await readFile(join(BUNDLE_DIR, 'package.json'), 'utf8'));
   assert.equal(manifest.piManager.profile, 'mine');
-  assert.equal(manifest.pi.extensions.length, 6);
-  assert.ok(manifest.pi.extensions.includes(join(external, 'index.js')));
-  assert.ok(manifest.pi.extensions.includes(join(BUNDLE_DIR, '.snapshots', manifest.piManager.id, 'npm/node_modules/one/index.js')));
+  // Git and npm entries are declared at their published refs; the local
+  // reference is declared as-is. Nothing is flattened into a copied file path,
+  // so Pi keeps the `owner/repo:path` identity of every migrated package.
+  assert.deepEqual(manifest.pi.extensions, []);
+  const declarations = manifest.piManager.declarations;
+  assert.deepEqual(declarations.map((item: { kind: string }) => item.kind), ['npm', 'git', 'git', 'git', 'git', 'local']);
+  assert.equal(declarations[0].pinned, 'npm:one@1.0.0');
+  assert.deepEqual(declarations[0].filters, npmEntry);
+  assert.deepEqual(declarations.slice(1, 5).map((item: { identity: string }) => item.identity),
+    ['git:github.com/acme/two', 'git:github.com/acme/three', 'git:github.com/acme/four', 'git:github.com/acme/five']);
+  // The configured spelling survives pinning, so Pi still matches the entry.
+  assert.ok(declarations[2].pinned.startsWith('https://github.com/acme/three@'));
+  assert.ok(declarations[1].pinned.startsWith('git:github.com/acme/two@'));
+  for (const item of declarations.slice(1, 5)) assert.match(item.pinned, /@[0-9a-f]{40}$/);
+  assert.equal(declarations[5].pinned, external);
   // Source, candidate and publication never share hardlinks or writable files.
   await writeFile(join(npm, 'index.js'), 'source changed');
   assert.match(await readFile(join(generation, 'npm/node_modules/one/index.js'), 'utf8'), /must not execute/);

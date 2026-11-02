@@ -28,6 +28,24 @@ export interface PackageState {
   missing?: string[];
 }
 
+/** A package declaration exported by a publication. Git and npm sources carry a
+ * pinned ref so Pi keeps loading them as packages instead of copied files.
+ */
+export interface PublishedDeclaration {
+  kind: 'git' | 'npm' | 'local';
+  /** Logical source configured in the profile, e.g. `git:github.com/o/r@v1`. */
+  source: string;
+  /** Pi-compatible identity: `git:host/path`, `npm:name` or `local:/path`. */
+  identity: string;
+  /** Source written to Pi's settings, pinned to the published commit/version. */
+  pinned: string;
+  ref?: string;
+  /** Checkout inside the publication snapshot, relative to its root. */
+  snapshot?: string;
+  /** Original entry, preserved so resource filters survive publication. */
+  filters?: PackageEntry;
+}
+
 /** Only manager-used fields are typed; unrelated Pi settings round-trip intact. */
 export interface PiSettings extends Partial<Record<PiResourceType, string[]>> {
   packages?: PackageEntry[];
@@ -156,8 +174,15 @@ export interface PiSettingsManager {
   getGlobalSettings(): PiSettings;
   setPackages(packages: PackageEntry[]): void;
 }
+export interface PiPackageManagerOptions {
+  cwd: string;
+  agentDir: string;
+  settingsManager: PiSettingsManager;
+}
 export interface PiPackageManager {
   setProgressCallback(callback: (event: { message?: string }) => void): void;
+  install(source: string, options?: { local?: boolean }): Promise<void>;
+  getInstalledPath(source: string, scope: 'user' | 'project'): string | undefined;
   installAndPersist(source: string): Promise<void>;
   removeAndPersist(source: string): Promise<boolean>;
   update(source?: string): Promise<void>;
@@ -165,6 +190,10 @@ export interface PiPackageManager {
   resolve(onMissing: () => Promise<'skip'>): Promise<WorkerSnapshot['paths']>;
 }
 export interface PiSdk {
-  SettingsManager: { inMemory(settings: PiSettings, options: { projectTrusted: boolean }): PiSettingsManager };
-  DefaultPackageManager: new (options: { cwd: string; agentDir: string; settingsManager: PiSettingsManager }) => PiPackageManager;
+  SettingsManager: {
+    inMemory(settings: PiSettings, options: { projectTrusted: boolean }): PiSettingsManager;
+    /** Loads and persists the real settings files for the given agent dir. */
+    create(cwd: string, agentDir: string): PiSettingsManager;
+  };
+  DefaultPackageManager: new (options: PiPackageManagerOptions) => PiPackageManager;
 }

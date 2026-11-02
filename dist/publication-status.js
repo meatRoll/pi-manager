@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { lstat, readdir, readFile, readlink, open } from 'node:fs/promises';
 import { join, relative } from 'node:path';
-import { BUNDLE_DIR, exportableResources } from './bundle.js';
+import { BUNDLE_DIR, carriedResources, isManagerOrBundle } from './bundle.js';
+import { planDeclarations } from './declarations.js';
 import { getSettings, getMetadata } from './core.js';
 import { absoluteEntries, generationDigest, generationPath } from './generations.js';
 import { packageState } from './package-state.js';
@@ -84,11 +85,24 @@ export function createPublicationInspector() {
             };
             // Compare exactly what publication exports: user-level discoveries are
             // never written to the snapshot, so they cannot make it look stale.
-            const exportable = exportableResources(current.resources);
+            // Format 2 declares package resources and copies only the rest, so an
+            // unpinnable package is reproducible only by comparing its source too.
+            const planned = published.format === 2
+                ? await planDeclarations(current.profile, { shouldSkip: entry => isManagerOrBundle(entry, current.root) })
+                : undefined;
+            const exportable = carriedResources(current.resources, planned?.declarations.map(item => item.source) ?? []);
             for (const type of RESOURCE_TYPES) {
                 signal?.throwIfAborted();
                 const actual = exportable.filter(resource => resource.type === type).map(resource => rebase(resource.path)).sort();
                 const expected = manifest.pi[type].slice().sort();
+                if (JSON.stringify(actual) !== JSON.stringify(expected))
+                    return 'unpublished';
+            }
+            // A moved commit is an unpublished change even when every file digest and
+            // package declaration looks identical.
+            if (planned) {
+                const expected = (published.declarations || []).map(item => item.pinned).sort();
+                const actual = planned.declarations.map(item => item.pinned).sort();
                 if (JSON.stringify(actual) !== JSON.stringify(expected))
                     return 'unpublished';
             }

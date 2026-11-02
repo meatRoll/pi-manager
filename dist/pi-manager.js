@@ -33,11 +33,12 @@ export async function openManager(ctx, loaded) {
         changed();
     } };
     const publish = async (profile) => {
-        if (!await ctx.ui.confirm('Use on next Pi start?', 'Exports a detached package snapshot. Restart Pi to load it; current extensions and context are unchanged. External local packages remain references.'))
+        if (!await ctx.ui.confirm('Use on next Pi start?', 'Exports a detached snapshot and declares its packages as pinned Git/npm sources. Restart Pi to load it; current extensions and context are unchanged. External local packages remain references.'))
             return;
         await mutate(async () => {
-            const result = await working(ctx, 'Publishing package snapshot…', () => publishBundle(profile));
-            notify(`Published ${result.profile || 'manager only'} for next Pi start. Restart Pi, do not expect hot unloading. Package: ${BUNDLE_DIR}`);
+            const result = await working(ctx, 'Publishing package snapshot…', () => publishBundle(profile, { activate: true, agentDir: sourcePiAgentDir(), cwd: ctx.cwd }));
+            const declared = result.declarations?.length ?? 0;
+            notify(`Published ${result.profile || 'manager only'} for next Pi start${declared ? ` · ${declared} package declaration${declared === 1 ? '' : 's'} applied` : ''}. Restart Pi, do not expect hot unloading. Package: ${BUNDLE_DIR}`);
         });
     };
     const packageRun = async (profile, command, source) => {

@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { publishBundle, publishedBundle, BUNDLE_DIR, assertPublishLocation } from './bundle.js';
 import { run } from './core.js';
 import { sourcePiAgentDir } from './migration.js';
+import { applyPublishedDeclarations } from './declarations.js';
 import { canonicalLocation, ensureManagerHome, rememberPublishDir } from './storage.js';
 import { networkEnvironment } from './proxy.js';
 import { errorMessage } from './errors.js';
@@ -71,17 +72,29 @@ export async function installPiExtension(acknowledged = false): Promise<void> {
   // that cannot rewrite the active export still registers both packages.
   assertPublishLocation();
   let republishWarning: string | null = null;
-  try { await publishBundle((await publishedBundle())?.profile || null); }
-  catch (error) { republishWarning = `Left the existing publication untouched: ${errorMessage(error)}`; }
+  let published: Awaited<ReturnType<typeof publishBundle>> | null = null;
+  try {
+    published = await publishBundle((await publishedBundle())?.profile || null, {
+      activate: true, install: false, agentDir: sourcePiAgentDir(), cwd: process.cwd(),
+    });
+  } catch (error) { republishWarning = `Left the existing publication untouched: ${errorMessage(error)}`; }
   const remembered = await rememberPublishDir();
   const code = await run(pi, ['install', BUNDLE_DIR], { env });
   if (code !== 0) throw new Error(`pi install exited ${code}`);
   registered.push(BUNDLE_DIR);
+  // Declare the preset's packages where Pi reads them. Format 1 publications
+  // carried copied files instead and have nothing to declare. Installation is
+  // skipped here: Pi resolves new declarations on its next start, and a publish
+  // from /manager has already reconciled them.
+  const activation = published
+    ? await applyPublishedDeclarations(published, { agentDir: sourcePiAgentDir(), cwd: process.cwd(), install: false })
+    : undefined;
   const stale = await staleBundleDeclarations();
   console.log([
     `Registered Pi packages: ${registered.join(', ')}`,
     ...(remembered ? [`Saved ${remembered} as the publish directory for future runs.`] : []),
     ...(republishWarning ? [republishWarning] : []),
+    ...(activation?.applied.length ? [`Declared ${activation.applied.length} package${activation.applied.length === 1 ? '' : 's'} at their published refs.`] : []),
     ...(stale.length ? [`Remove the superseded declaration${stale.length > 1 ? 's' : ''}: pi remove ${stale.map(item => resolve(sourcePiAgentDir(), item)).join(' ')}`] : []),
     registered.some(item => item === BUNDLE_DIR) ? `Published resources stay in ${BUNDLE_DIR}; update the manager with "pi update".` : '',
     'Restart Pi, then type /manager. No separate pi-manager process is needed.',

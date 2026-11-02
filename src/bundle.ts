@@ -1,26 +1,41 @@
 import { accessSync, constants, readFileSync, existsSync } from 'node:fs';
 import { mkdir, readFile, readdir, rm, realpath } from 'node:fs/promises';
-import { dirname, join, relative } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { inventory } from './resources.js';
 import { assertProfile, ensureManagerHome, withProfileLock, MANAGER_HOME, PUBLISH_DIR, PUBLISH_DIR_SOURCE, RESOURCE_TYPES, safePath, writeJson, readJson, isInside } from './storage.js';
 import { copyOwnedTree, generationPath, absoluteEntries, runPackageWorker } from './generations.js';
 import { packageState } from './package-state.js';
-import { getSettings, getMetadata } from './core.js';
+import { getSettings, getMetadata, resolveSourcePath } from './core.js';
+import { planDeclarations, activateDeclarations, declarationEntries } from './declarations.js';
+import { homedir } from 'node:os';
 import { errorCode } from './errors.js';
 import { VERSION } from './version.js';
-import type { PiResourceType, Resource, ResourceType } from './types.js';
+import type { PackageEntry, PiResourceType, PiSdk, PublishedDeclaration, Resource, ResourceType } from './types.js';
+
+/** Pi agent directory a publication activates into. Resolved locally instead of
+ * importing migration.ts, which already depends on this module.
+ */
+function defaultAgentDir(): string {
+  return resolve(resolveSourcePath(process.env.PI_MANAGER_SOURCE_AGENT_DIR
+    || process.env.PI_CODING_AGENT_DIR
+    || join(homedir(), '.pi', 'agent')));
+}
 
 export const BUNDLE_DIR = PUBLISH_DIR;
 export interface LoadedBundle {
   /** 1: every resource is copied into the snapshot. 2: package resources are
-   * declared and installed by the publication. Reading 2 matters because a newer
+   * declared and installed by the publication. Both are readable because a newer
    * build may publish one; this build must not fail to start on it. */
   format: 1 | 2;
   id: string;
   profile: string | null;
   managerHome: string;
   contexts: { name: string; content: string }[];
+  /** Format 2: package declarations this publication installs into Pi. */
+  declarations?: PublishedDeclaration[];
+  /** Format 2: identities installed by the previous publication. */
+  superseded?: string[];
   /** Newer fields are read through untouched, never invented here. */
   [key: string]: unknown;
 }
@@ -33,8 +48,9 @@ interface BundleManifest {
   piManager: LoadedBundle;
 }
 
-/** Accept any export a newer build could publish, but only if it actually
- * describes this manager home and names a snapshot in a usable form. */
+/** Accept every format this build can read or write, but only if the export
+ * actually describes this manager home and names a snapshot in a usable form. */
+export const WRITABLE_FORMAT = 2;
 function isLoadedBundle(value: unknown, managerHome: string): value is LoadedBundle {
   const candidate = value as LoadedBundle | undefined;
   return (candidate?.format === 1 || candidate?.format === 2)
@@ -69,6 +85,32 @@ export async function publishedBundle(): Promise<LoadedBundle | null> {
 export function exportableResources<T extends Pick<Resource, 'type' | 'enabled' | 'origin'>>(resources: T[]): (T & { type: PiResourceType })[] {
   return resources.filter((resource): resource is T & { type: PiResourceType } =>
     resource.enabled && resource.type !== 'context' && resource.origin !== 'global');
+}
+
+/** Resources the bundle itself must carry: everything the preset owns, plus
+ * package resources whose provenance could not be pinned. Package resources that
+ * are declared stay packages, so Pi keeps their repository identity (labels,
+ * grouping, `pi update`).
+ */
+export function carriedResources<T extends Pick<Resource, 'type' | 'enabled' | 'origin' | 'source'>>(
+  resources: T[],
+  pinnedSources: Iterable<string>,
+): (T & { type: PiResourceType })[] {
+  const pinned = new Set(pinnedSources);
+  return exportableResources(resources).filter(resource => resource.origin !== 'package' || !pinned.has(resource.source));
+}
+
+/** The manager installs itself and its bundle explicitly; re-declaring either
+ * from a publication would register `/manager` twice.
+ */
+export function isManagerOrBundle(entry: PackageEntry, baseDir: string): boolean {
+  const source = typeof entry === 'string' ? entry : entry.source;
+  if (source.startsWith('npm:') || source.startsWith('git:')) return false;
+  const resolved = isAbsolute(source) ? source : resolve(baseDir, source);
+  if (resolve(resolved) === resolve(BUNDLE_DIR)) return true;
+  try {
+    return JSON.parse(readFileSync(join(resolved, 'package.json'), 'utf8')).name === 'pi-manager';
+  } catch { return false; }
 }
 
 export const DEFAULT_SNAPSHOT_RETENTION = 2;
@@ -147,26 +189,55 @@ export function assertPublishLocation() {
  * The live Pi keeps its old files even if a staging profile is edited/deleted.
  * External local packages are intentionally reference-only, not snapshotted.
  */
-export async function publishBundle(profile: string | null): Promise<LoadedBundle> {
+export interface PublishOptions {
+  /** Write the declarations into Pi's settings as part of the transaction.
+   * Off by default so tests and pure exports never touch a real Pi install.
+   */
+  activate?: boolean;
+  /** Reconcile pinned checkouts during activation (needs the network on a
+   * changed commit). Installers keep this on; `/manager` repairs separately.
+   */
+  install?: boolean;
+  agentDir?: string;
+  cwd?: string;
+  /** Test seam: resolve Pi's SDK without importing it. */
+  sdk?: PiSdk;
+}
+
+/** The published format number, including formats this build cannot read, so a
+ * publication never silently replaces a newer one.
+ */
+async function publishedFormat(): Promise<number | null> {
+  try {
+    const value = await readJson<BundleManifest>(await safePath(join(BUNDLE_DIR, 'package.json'))) as BundleManifest;
+    const format = (value.piManager as { format?: unknown } | undefined)?.format;
+    return typeof format === 'number' ? format : null;
+  } catch { return null; }
+}
+
+export async function publishBundle(profile: string | null, options: PublishOptions = {}): Promise<LoadedBundle> {
   await ensureManagerHome();
   assertPublishLocation();
-  // A newer build may publish a format this one cannot write. Overwriting it
+  // A newer build may publish a format this one cannot even read. Overwriting it
   // would silently drop whatever that format carries (for example package
   // declarations), so refuse instead. An unreadable manifest is not protected:
   // publishing over it repairs the export.
-  const existing = await publishedBundle().catch(() => null);
-  if (existing && existing.format > 1) {
-    throw new Error(`The active publication uses format ${existing.format}, which this build cannot rewrite. Update the manager instead of republishing, or publish with the build that produced it.`);
+  const existing = await publishedFormat();
+  if (existing !== null && existing > WRITABLE_FORMAT) {
+    throw new Error(`The active publication uses format ${existing}, which this build cannot rewrite. Update the manager instead of republishing, or publish with the build that produced it.`);
   }
-  return profile ? withProfileLock(profile, () => buildBundle(profile)) : buildBundle(null);
+  return profile ? withProfileLock(profile, () => buildBundle(profile, options)) : buildBundle(null, options);
 }
 
-async function buildBundle(profile: string | null): Promise<LoadedBundle> {
+async function buildBundle(profile: string | null, options: PublishOptions = {}): Promise<LoadedBundle> {
   const id = `${Date.now()}-${randomUUID()}`;
   const root = await safePath(join(BUNDLE_DIR, '.snapshots', id));
   await mkdir(root, { recursive: true, mode: 0o700 });
   try {
-    const loaded: LoadedBundle = { format: 1, id, profile, managerHome: MANAGER_HOME, contexts: [] };
+    // The previous publication decides which declarations this one supersedes;
+    // read it before the new manifest replaces it.
+    const previous = await publishedBundle().catch(() => null);
+    const loaded: LoadedBundle = { format: 2, id, profile, managerHome: MANAGER_HOME, contexts: [] };
     const paths: BundleManifest['pi'] = { extensions: [], skills: [], prompts: [], themes: [] };
     if (profile) {
       const source = await assertProfile(profile);
@@ -186,21 +257,52 @@ async function buildBundle(profile: string | null): Promise<LoadedBundle> {
         }
         return path;
       };
-      for (const resource of exportableResources(current.resources)) {
+      // Only resources this preset owns travel inside the bundle. Package
+      // resources stay packages: Pi declares them from the entry below, so a
+      // Git extension keeps its `owner/repo:path` identity instead of decaying
+      // into a copied file path.
+      const planned = await planDeclarations(profile, {
+        shouldSkip: entry => isManagerOrBundle(entry, source),
+      });
+      // A package that cannot be pinned (checkout without Git metadata, unknown
+      // source) falls back to the copied form: resources must never disappear
+      // because provenance could not be preserved.
+      for (const resource of carriedResources(current.resources, planned.declarations.map(item => item.source))) {
         paths[resource.type].push(rebase(resource.path));
       }
+      loaded.declarations = planned.declarations;
+      loaded.superseded = previous?.declarations?.map(item => item.identity) ?? [];
       for (const context of (await getMetadata(profile)).contexts.filter(item => item.enabled)) {
         const path = rebase(join(source, context.path));
         if (!isInside(join(root, 'resources', 'context'), path)
           || !isInside(await realpath(join(root, 'resources', 'context')), await realpath(path))) throw new Error('Context export escaped its owned directory');
         loaded.contexts.push({ name: context.name, content: await readFile(path, 'utf8') });
       }
+    } else {
+      // Manager-only publication: drop every declaration the last preset added.
+      loaded.declarations = [];
+      loaded.superseded = previous?.declarations?.map(item => item.identity) ?? [];
     }
     // The manager itself is installed as its own Pi package, so the snapshot
     // carries resources only. `piManager` below is the binding the manager reads
     // at startup (profile, manager home, published context).
     for (const type of RESOURCE_TYPES) paths[type] = [...new Set(paths[type])];
     const manifest: BundleManifest = { name: 'pi-manager-local-bundle', version: VERSION, private: true, type: 'module', pi: paths, piManager: loaded };
+    // Declarations land in Pi's settings before the manifest commits: a
+    // publication that cannot be loaded is worse than a rejected one. On
+    // failure the previous publication stays active and the snapshot is removed.
+    if (options.activate) {
+      await activateDeclarations(
+        declarationEntries(loaded.declarations ?? []),
+        loaded.superseded ?? [],
+        {
+          agentDir: options.agentDir ?? defaultAgentDir(),
+          cwd: options.cwd ?? process.cwd(),
+          install: options.install !== false,
+          sdk: options.sdk,
+        },
+      );
+    }
     // Atomic commit point. Nothing that can fail/deletes files follows it.
     await writeJson(join(BUNDLE_DIR, 'package.json'), manifest);
     return loaded;

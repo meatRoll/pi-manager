@@ -17,7 +17,11 @@ function isGitSource(value: string) {
   return value.startsWith('git:') || /^(?:(?:git\+)?(?:https?|ssh|git):\/\/|git@)/i.test(value);
 }
 
-function gitRepositoryLabel(value: string): string | undefined {
+/** Host and repository path of a Git source, for identity and labels alike.
+ * `git:github.com/o/r@v1` and `https://github.com/o/r.git` both yield
+ * `{ host: 'github.com', path: 'o/r' }`.
+ */
+export function gitRepositoryParts(value: string): { host: string; path: string } | undefined {
   if (!isGitSource(value)) return undefined;
   const gitPrefix = value.startsWith('git:') && !value.startsWith('git://');
   let repo = gitPrefix ? value.slice(4).trim() : value;
@@ -42,7 +46,13 @@ function gitRepositoryLabel(value: string): string | undefined {
     }
     path = path.split(/[@#?]/, 1)[0].replace(/\/+$/, '').replace(/\.git$/i, '');
     if (!host || path.split('/').length < 2 || path.split('/').some(part => !part || part === '.' || part === '..') || /[\\\s]/.test(path)) return undefined;
-    // Keep other hosts/subgroups visible to avoid conflating unrelated repos.
-    return host.toLowerCase() === 'github.com' ? path : `${host}/${path}`;
+    return { host: host.toLowerCase(), path };
   } catch { return undefined; }
+}
+
+function gitRepositoryLabel(value: string): string | undefined {
+  const parts = gitRepositoryParts(value);
+  if (!parts) return undefined;
+  // Keep other hosts/subgroups visible to avoid conflating unrelated repos.
+  return parts.host === 'github.com' ? parts.path : `${parts.host}/${parts.path}`;
 }
