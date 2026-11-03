@@ -13,10 +13,12 @@ export async function choose<T>(ctx: ExtensionCommandContext, title: string, cho
   }
   return ctx.ui.custom<T | undefined>((tui, theme, _keys, done) => {
     let searching = false, focused = false;
+    let visible: Array<{ value: string; label: string }> = [];
     const input = new Input();
     const makeList = (query: string) => {
       const items = labels.map((label, index) => ({ value: String(index), label }))
         .filter(item => item.label.toLowerCase().includes(query.toLowerCase()));
+      visible = items;
       const result = new SelectList(items, Math.max(1, Math.min(12, (process.stdout.rows || 24) - 12)), {
         selectedPrefix: text => theme.fg('accent', text), selectedText: text => theme.fg('accent', text),
         description: text => theme.fg('muted', text), scrollInfo: text => theme.fg('dim', text), noMatch: text => theme.fg('warning', text),
@@ -32,15 +34,26 @@ export async function choose<T>(ctx: ExtensionCommandContext, title: string, cho
       set focused(value: boolean) { focused = value; input.focused = focused && searching; },
       render(width: number) {
         return [truncateToWidth(theme.fg('accent', plain(title)), width), '',
-          ...(searching ? input.render(width) : [truncateToWidth(theme.fg('muted', `Search: ${input.getValue()}`), width)]), '',
-          ...list.render(width).map(line => truncateToWidth(line, width)), '', truncateToWidth(theme.fg('dim', '↑↓ select · Enter open · / search · Esc back'), width)];
+          ...(searching ? input.render(width) : [truncateToWidth(theme.fg('muted', `Search: ${input.getValue() || '( ↑ from first row )'}`), width)]), '',
+          ...list.render(width).map(line => truncateToWidth(line, width)), '', truncateToWidth(theme.fg('dim', '↑↓ select · Enter open · ↑ search · Esc back'), width)];
       },
       invalidate() { list.invalidate(); input.invalidate(); },
       handleInput(data: string) {
-        if (data === '/' && !searching) { searching = true; input.focused = focused; }
-        else if (searching && matchesKey(data, Key.escape)) { searching = false; input.focused = false; input.setValue(''); list = makeList(''); }
-        else if (searching && ![Key.up, Key.down, Key.pageUp, Key.pageDown].some(key => matchesKey(data, key))) { input.handleInput(data); list = makeList(input.getValue()); }
-        else list.handleInput(data);
+        const up = matchesKey(data, Key.up), down = matchesKey(data, Key.down);
+        const pageUp = matchesKey(data, Key.pageUp), pageDown = matchesKey(data, Key.pageDown);
+        if (searching && matchesKey(data, Key.escape)) {
+          searching = false; input.focused = false; input.setValue(''); list = makeList('');
+        } else if (!searching && matchesKey(data, Key.escape) && input.getValue()) {
+          input.setValue(''); list = makeList('');
+        } else if (searching && (up || down || pageUp || pageDown)) {
+          searching = false; input.focused = false;
+        } else if (searching) {
+          input.handleInput(data); list = makeList(input.getValue());
+        } else if (up) {
+          const index = visible.findIndex(item => item.value === list.getSelectedItem()?.value);
+          if (index <= 0) { searching = true; input.focused = focused; }
+          else list.handleInput(data);
+        } else list.handleInput(data);
         tui.requestRender();
       },
     };
@@ -126,9 +139,9 @@ export async function checklist<T>(ctx: ExtensionCommandContext, title: string, 
         if (height !== listHeight) rebuild();
         const count = selected.size;
         return [truncateToWidth(theme.fg('accent', plain(title)), width), '',
-          ...(searching ? input.render(width) : [truncateToWidth(theme.fg('muted', `Selected: ${count} · Search: ${query || '( / to search )'}`), width)]), '',
+          ...(searching ? input.render(width) : [truncateToWidth(theme.fg('muted', `Selected: ${count} · Search: ${query || '( ↑ from first row )'}`), width)]), '',
           ...list.render(width).map(line => truncateToWidth(line, width)), '',
-          truncateToWidth(theme.fg('dim', `${hint ? `${hint} · ` : ''}↑↓ move · Space toggle · A all · N none · / search · Enter confirm · Esc cancel`), width)];
+          truncateToWidth(theme.fg('dim', `${hint ? `${hint} · ` : ''}↑↓ move · Space toggle · A all · N none · ↑ search · Enter confirm · Esc cancel`), width)];
       },
       invalidate() { list.invalidate(); input.invalidate(); },
       handleInput(data: string) {
@@ -138,9 +151,13 @@ export async function checklist<T>(ctx: ExtensionCommandContext, title: string, 
           if (searching || query) { searching = false; input.focused = false; input.setValue(''); query = ''; rebuild(); }
           else finish(undefined);
         } else if (searching && matchesKey(data, Key.enter)) { searching = false; input.focused = false; }
-        else if (searching && !up && !down && !pageUp && !pageDown) { input.handleInput(data); query = input.getValue(); rebuild(); }
-        else if (up || down || pageUp || pageDown) move(up ? -1 : down ? 1 : pageUp ? -height : height);
-        else if (matchesKey(data, Key.slash)) { searching = true; input.focused = focused; }
+        else if (searching && (up || down || pageUp || pageDown)) { searching = false; input.focused = false; }
+        else if (searching) { input.handleInput(data); query = input.getValue(); rebuild(); }
+        else if (up) {
+          const index = filtered().findIndex(entry => String(entry.index) === list.getSelectedItem()?.value);
+          if (index <= 0) { searching = true; input.focused = focused; input.setValue(query); }
+          else move(-1);
+        } else if (down || pageUp || pageDown) move(down ? 1 : pageUp ? -height : height);
         else if (matchesKey(data, Key.space)) {
           const index = Number(list.getSelectedItem()?.value);
           if (Number.isInteger(index) && !items[index].disabled) {

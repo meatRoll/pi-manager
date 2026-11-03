@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import type { ExtensionCommandContext, KeybindingsManager, Theme } from '@earendil-works/pi-coding-agent';
 import type { Component, Focusable, TUI } from '@earendil-works/pi-tui';
 import { visibleWidth } from '@earendil-works/pi-tui';
-import { choose, view } from '../src/pi-ui.js';
+import { checklist, choose, view } from '../src/pi-ui.js';
 
 function host() {
   let component: (Component & Partial<Focusable>) | undefined;
@@ -20,7 +20,8 @@ test('native Pi selector searches, preserves focus, opens once and fits narrow/w
   const h = host();
   const result = choose(h.ctx, '管理器 / a long title', [{ label: 'alpha', value: 'a' }, { label: '中文 beta', value: 'b' }]);
   const component = h.component(); component.focused = true;
-  component.handleInput!('/'); component.handleInput!('beta');
+  component.handleInput!('/');
+  component.handleInput!('\x1b[A'); component.handleInput!('beta'); // Up from first row focuses search
   for (const width of [12, 30, 90]) for (const line of component.render(width)) assert.ok(visibleWidth(line) <= width, line);
   component.handleInput!('\r'); // leave search without selecting
   component.handleInput!('\r');
@@ -30,11 +31,25 @@ test('native Pi selector searches, preserves focus, opens once and fits narrow/w
 test('native Pi selector Escape clears search first then cancels', async () => {
   const h = host();
   const result = choose(h.ctx, 'Select', [{ label: 'alpha', value: 'a' }]);
-  h.component().handleInput!('/');h.component().handleInput!('missing');
+  h.component().handleInput!('\x1b[A');h.component().handleInput!('missing');
   h.component().handleInput!('\x1b');
   assert.ok(h.component().render(40).some(line => line.includes('alpha')));
   h.component().handleInput!('\x1b');
   assert.equal(await result, undefined);
+});
+
+test('native checklist focuses search by moving up from the first row without a slash shortcut', async () => {
+  const h = host();
+  const result = checklist(h.ctx, 'Pick', [{ label: 'alpha', value: 'a' }, { label: 'beta', value: 'b' }]);
+  const component = h.component(); component.focused = true;
+  component.handleInput!('/'); // slash no longer opens search
+  component.handleInput!('\x1b[A'); component.handleInput!('beta');
+  const rendered = component.render(50).join('\n');
+  assert.ok(rendered.includes('beta')); assert.ok(!rendered.includes('alpha'));
+  component.handleInput!('\r'); // leave search
+  component.handleInput!(' '); // select beta
+  component.handleInput!('\r');
+  assert.deepEqual(await result, ['b']);
 });
 
 test('native preview wraps to width, scrolls and completes without changing content', async () => {

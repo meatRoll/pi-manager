@@ -16,7 +16,7 @@ import type { PublicationStatus } from './publication-status.js';
 import { errorCode, errorMessage } from './errors.js';
 import { displayProxy, proxySummary, setProxySettings } from './proxy.js';
 import { readModels, readSettings } from './model-config.js';
-import { addProviderFlow, buildModelRows, modelGlobalStatus, runModelAction } from './model-ui.js';
+import { addModelToProviderFlow, addProviderFlow, buildModelPages, modelGlobalStatus, runModelAction } from './model-ui.js';
 import type { Resource, ResourceType, Inventory, ProfileSummary } from './types.js';
 
 export function initialProfile(profiles: ProfileSummary[], defaultProfile?: string | null, loaded?: string | null, published?: string | null): string | undefined {
@@ -102,7 +102,7 @@ export async function openManager(ctx: ExtensionCommandContext, loaded?: LoadedB
     }
   };
   const add = async (profile: string, tab: DashboardTab) => {
-    if (tab === 'models') { await addProviderFlow(ctx); return; }
+    if (tab === 'models') return;
     const kind = tab === 'all' || tab === 'more' ? await choose<ResourceType | 'packages'>(ctx, 'Add to staging',
       (['extensions', 'skills', 'context', 'packages', 'prompts', 'themes'] as const).map(value => ({ label: value, value }))) : tab;
     if (!kind) return;
@@ -234,21 +234,25 @@ export async function openManager(ctx: ExtensionCommandContext, loaded?: LoadedB
         toggle: resource.origin !== 'global', editable: resource.owned, deletable: resource.owned,
       };
     });
-    const makeModel = (): DashboardModel => ({
-      profile: profile!, loading: `loaded: ${loaded?.profile || 'manager only'} · next start: ${published?.profile || 'manager only'}`,
-      publication: status === 'checking' ? 'Checking publication in background… Current session unchanged'
-        : status === 'unpublished' ? 'Unpublished changes · P publish for next start' : status === 'unknown' ? 'Publication status unknown · R refresh / P publish' : loaded?.id === published?.id ? 'Published · staging only; external local packages remain references' : 'Published · restart Pi to load; current session unchanged',
-      pending: status === 'unknown' || status === 'checking' ? undefined : status === 'unpublished',
-      busy: !current,
-      globalDetail: modelGlobalStatus(modelsDoc, settingsDoc),
-      rows: {
-        all: resourceRows(), extensions: resourceRows('extensions'), skills: resourceRows('skills'),
-        context: resourceRows('context'), prompts: resourceRows('prompts'), themes: resourceRows('themes'),
-        packages: (current?.packages || []).map(pkg => ({ id: `package:${pkg.source}`, label: `[${pkg.enabled ? 'x' : ' '}] ${pkg.displayName}`, detail: pkg.version || 'local', toggle: true })),
-        models: buildModelRows(modelsDoc, settingsDoc),
-        more: moreEntries,
-      },
-    });
+    const makeModel = (): DashboardModel => {
+      const modelPages = buildModelPages(modelsDoc, settingsDoc);
+      return {
+        profile: profile!, loading: `loaded: ${loaded?.profile || 'manager only'} · next start: ${published?.profile || 'manager only'}`,
+        publication: status === 'checking' ? 'Checking publication in background… Current session unchanged'
+          : status === 'unpublished' ? 'Unpublished changes · P publish for next start' : status === 'unknown' ? 'Publication status unknown · R refresh / P publish' : loaded?.id === published?.id ? 'Published · staging only; external local packages remain references' : 'Published · restart Pi to load; current session unchanged',
+        pending: status === 'unknown' || status === 'checking' ? undefined : status === 'unpublished',
+        busy: !current,
+        globalDetail: modelGlobalStatus(modelsDoc, settingsDoc),
+        modelPages,
+        rows: {
+          all: resourceRows(), extensions: resourceRows('extensions'), skills: resourceRows('skills'),
+          context: resourceRows('context'), prompts: resourceRows('prompts'), themes: resourceRows('themes'),
+          packages: (current?.packages || []).map(pkg => ({ id: `package:${pkg.source}`, label: `[${pkg.enabled ? 'x' : ' '}] ${pkg.displayName}`, detail: pkg.version || 'local', toggle: true })),
+          models: modelPages.root,
+          more: moreEntries,
+        },
+      };
+    };
     const load = async (update: (model: DashboardModel) => void, signal: AbortSignal) => {
       if (!current) {
         const result = await inventory(profile!, { signal });
@@ -283,8 +287,11 @@ export async function openManager(ctx: ExtensionCommandContext, loaded?: LoadedB
         if (selected && selected !== profile) { profile = selected; state = newDashboardState(); changed(); }
       } else if (action.kind === 'publish') { if (state.tab !== 'models') await publish(profile!); }
       else if (action.kind === 'add') {
-        if (state.tab === 'models') { await addProviderFlow(ctx); await refreshModelConfig(); }
-        else await add(profile!, state.tab);
+        if (state.tab === 'models') {
+          if (state.modelPage === 'models') await addModelToProviderFlow(ctx);
+          else await addProviderFlow(ctx);
+          await refreshModelConfig();
+        } else await add(profile!, state.tab);
       }
       else if (action.kind === 'refresh') {
         if (state.tab === 'models') await refreshModelConfig();

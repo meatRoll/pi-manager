@@ -54,11 +54,15 @@ test('dashboard search keeps shortcuts literal while typing, preserves focus and
   const h = host(), state = newDashboardState();
   const result = dashboard(h.ctx, fixture(), state);
   const component = h.component(); component.focused = true;
-  component.handleInput!('/'); component.handleInput!('beta');
+  component.handleInput!('/');
+  assert.equal(state.views.all?.query, ''); // slash no longer opens search
+  component.handleInput!('\x1b[A'); component.handleInput!('beta'); // Up from first row focuses search
   assert.ok(component.render(80).some(line => line.includes('中文 beta')));
   assert.equal(component.render(80).some(line => line.includes('alpha ·')), false);
   assert.equal(state.views.all?.query, 'beta');
   component.handleInput!('\r'); // only exit search, no preview
+  assert.ok(component.render(80).some(line => line.includes('中文 beta')));
+  assert.equal(component.render(80).some(line => line.includes('alpha ·')), false);
   component.handleInput!('e');
   assert.deepEqual(await result, { kind: 'edit', id: 'resource:b' });
   const reopened = dashboard(h.ctx, fixture(), state);
@@ -110,7 +114,9 @@ test('dashboard respects injected selection keybindings, preserves cursor focus 
     const result = dashboard(h.ctx, fixture(), newDashboardState());
     const component = h.component(); component.focused = true;
     component.handleInput!('\x0e'); // ctrl+n selects second row
-    component.handleInput!('/'); component.handleInput!('beta');
+    component.handleInput!('\x1b[A'); // back to first row
+    component.handleInput!('\x1b[A'); // focus search
+    component.handleInput!('beta');
     assert.ok(component.render(42).join('\n').includes('beta'));
     assert.equal(component.focused, true);
     component.handleInput!('\x19'); // ctrl+y exits search only
@@ -136,7 +142,7 @@ test('native dashboard renders before deferred discovery and keeps navigation/se
   const component = h.component(); component.focused = true;
   assert.ok(component.render(100).some(line => line.includes('Reading resource metadata')));
   component.handleInput!('p'); component.handleInput!('a'); // no writes before discovery
-  component.handleInput!('\t'); component.handleInput!('/'); component.handleInput!('beta');
+  component.handleInput!('\t'); component.handleInput!('\x1b[A'); component.handleInput!('beta'); // empty list: Up focuses search
   await Promise.resolve(); assert.ok(deliver);
   deliver({ ...ready, busy: false });
   assert.equal(state.tab, 'extensions'); assert.equal(state.views.extensions?.query, 'beta');
@@ -188,43 +194,93 @@ test('RPC dashboard navigates tabs without a profile submenu and returns stable 
   assert.equal(state.tab, 'extensions');
 });
 
-test('Models tab is global, hides publish, and routes model edit/add/refresh actions', async () => {
+test('Models tab groups providers and models into pages and keeps preset actions out', async () => {
   const model = fixture();
   model.globalDetail = '1 provider · 1 model · default local/fast · changes apply after /reload or restart';
-  model.rows.models = [
-    { id: 'model:provider:local', label: 'Local relay', detail: 'openai-completions · 1 model', editable: true },
-    { id: 'model:entry:local/fast', label: '  Fast', detail: 'fast · 200K ctx · reasoning', editable: true },
-    { id: 'model:raw', label: 'Edit models.json (raw JSON)…' },
-  ];
+  model.modelPages = {
+    root: [
+      { id: 'model:page:providers', label: 'Providers (1)…', detail: 'global models.json' },
+      { id: 'model:page:models', label: 'Models (1)…', detail: 'global models.json' },
+      { id: 'model:defaults', label: 'Defaults: local/fast' },
+      { id: 'model:enabled', label: 'Enabled models: all models' },
+      { id: 'model:raw', label: 'Edit models.json (raw JSON)…' },
+    ],
+    providers: [
+      { id: 'model:add-provider', label: '+ Add provider…' },
+      { id: 'model:provider:local', label: 'Local relay', detail: 'openai-completions · 1 model', editable: true },
+    ],
+    models: [
+      { id: 'model:add-model', label: '+ Add model…' },
+      { id: 'model:entry:local/fast', label: 'Local relay / Fast', detail: 'fast · 200K ctx · reasoning', editable: true },
+    ],
+  };
+  model.rows.models = model.modelPages.root;
+
   const state = newDashboardState(); state.tab = 'models';
   const h = host();
-  const result = dashboard(h.ctx, model, state);
+  const nav = dashboard(h.ctx, model, state);
   const component = h.component(); component.focused = true;
-  const rendered = component.render(100).join('\n');
+  let rendered = component.render(100).join('\n');
   assert.match(rendered, /global/);
+  assert.match(rendered, /Providers \(1\)/);
+  assert.match(rendered, /Models \(1\)/);
   assert.match(rendered, /A add provider/);
-  assert.match(rendered, /changes apply after \/reload/);
   assert.doesNotMatch(rendered, /Publish/);
   assert.doesNotMatch(rendered, /S preset/);
   assert.doesNotMatch(rendered, /Switch preset/);
-  component.handleInput!('e');
-  assert.deepEqual(await result, { kind: 'edit', id: 'model:provider:local' });
 
-  const ignored = dashboard(h.ctx, model, { ...state, views: {} });
+  component.handleInput!('\r'); // Providers page
+  assert.equal(state.modelPage, 'providers');
+  rendered = component.render(100).join('\n');
+  assert.match(rendered, /\(global\) \/ Providers/);
+  assert.match(rendered, /Local relay/);
+  assert.match(rendered, /A add provider/);
+
+  component.handleInput!('\x1b'); // back to Models root
+  assert.equal(state.modelPage, 'root');
+  component.handleInput!('\x1b[A'); // focus search from first row
+  component.handleInput!('providers');
+  assert.ok(component.render(100).some(line => line.includes('Providers (1)')));
+  component.handleInput!('\x1b'); // clear search
+  component.handleInput!('\x1b[B'); // Models page
+  component.handleInput!('\r');
+  assert.equal(state.modelPage, 'models');
+  rendered = component.render(100).join('\n');
+  assert.match(rendered, /\(global\) \/ Models/);
+  assert.match(rendered, /Add model/);
+  assert.match(rendered, /A add model/);
+  assert.match(rendered, /Local relay \/ Fast/);
+  component.handleInput!('\x1b'); // back to root
+  assert.equal(state.modelPage, 'root');
+  component.handleInput!('\x1b');
+  assert.equal(await nav, undefined);
+
+  const editState = newDashboardState(); editState.tab = 'models'; editState.modelPage = 'providers';
+  const edited = dashboard(h.ctx, model, editState);
+  h.component().handleInput!('\x1b[B'); // provider row
+  h.component().handleInput!('e');
+  assert.deepEqual(await edited, { kind: 'edit', id: 'model:provider:local' });
+
+  const ignored = dashboard(h.ctx, model, { ...state, modelPage: 'root', views: {} });
   h.component().handleInput!('s');
   h.component().handleInput!('\x1b');
   assert.equal(await ignored, undefined);
 
   for (const [key, kind] of [['a', 'add'], ['r', 'refresh']] as const) {
-    const next = dashboard(h.ctx, model, { ...state, views: {} });
+    const next = dashboard(h.ctx, model, { ...state, modelPage: 'root', views: {} });
     h.component().handleInput!(key);
     assert.deepEqual(await next, { kind });
   }
+  const addModel = dashboard(h.ctx, model, { ...state, modelPage: 'models', views: {} });
+  h.component().handleInput!('a');
+  assert.deepEqual(await addModel, { kind: 'add' });
 
   const titles: string[] = [], optionsSeen: string[][] = [];
+  const picks = ['Providers', 'Back to Models', 'Tab: All', 'Switch preset'];
   const ctx = { mode: 'rpc', ui: { select: async (title: string, options: string[]) => {
     titles.push(title); optionsSeen.push(options);
-    return options.find(option => option.includes(titles.length === 1 ? 'Tab: All' : 'Switch preset'));
+    const pick = picks.shift();
+    return options.find(option => pick && option.includes(pick));
   } } } as unknown as ExtensionCommandContext;
   const rpcState = newDashboardState(); rpcState.tab = 'models';
   assert.deepEqual(await dashboard(ctx, model, rpcState), { kind: 'switch' });
@@ -233,5 +289,11 @@ test('Models tab is global, hides publish, and routes model edit/add/refresh act
   assert.match(titles[0], /changes apply after \/reload/);
   assert.equal(optionsSeen[0].some(option => option.includes('Publish')), false);
   assert.equal(optionsSeen[0].some(option => option.includes('Switch preset')), false);
-  assert.equal(optionsSeen[1].some(option => option.includes('Publish')), true);
+  assert.equal(optionsSeen[0].some(option => option.includes('Providers (1)')), true);
+  assert.match(titles[1], /Models \/ Providers — global/);
+  assert.equal(optionsSeen[1].some(option => option.includes('Back to Models')), true);
+  assert.equal(optionsSeen[1].some(option => option.includes('+ Add provider')), true);
+  assert.equal(optionsSeen[1].some(option => option.includes('+ Add model')), false);
+  assert.equal(optionsSeen[3].some(option => option.includes('Publish')), true);
+  assert.equal(optionsSeen[3].some(option => option.includes('Switch preset')), true);
 });

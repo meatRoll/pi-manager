@@ -76,8 +76,13 @@ test('model rows expose global controls and provider/model entries', async () =>
   const models = await config.readModels();
   const settings = await config.readSettings();
   assert.deepEqual(ui.buildModelRows(models, settings).map(row => row.id), [
-    'model:add-provider', 'model:raw', 'model:defaults', 'model:enabled', 'model:add-override',
+    'model:page:providers', 'model:page:models', 'model:defaults', 'model:enabled',
+    'model:add-override', 'model:raw',
   ]);
+  const pages = ui.buildModelPages(models, settings);
+  assert.deepEqual(pages.root.map(row => row.id), ui.buildModelRows(models, settings).map(row => row.id));
+  assert.deepEqual(pages.providers.map(row => row.id), ['model:add-provider']);
+  assert.deepEqual(pages.models.map(row => row.id), ['model:add-model']);
   assert.match(ui.modelGlobalStatus(models, settings), /0 providers · 0 models · default \(not set\)/);
   assert.match(ui.modelGlobalStatus(models, settings), /\/reload or restart/);
 });
@@ -118,9 +123,13 @@ test('add provider and model flows edit fields, normalize defaults, and write ba
     contextWindow: 200000, maxTokens: 16384,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
   });
-  const rows = ui.buildModelRows(afterModel, await config.readSettings());
-  assert.ok(rows.some(row => row.id === 'model:provider:local' && row.editable));
-  assert.ok(rows.some(row => row.id === 'model:entry:local/fast' && row.editable));
+  const settings = await config.readSettings();
+  const rows = ui.buildModelRows(afterModel, settings);
+  assert.ok(rows.some(row => row.id === 'model:page:providers'));
+  assert.ok(rows.some(row => row.id === 'model:page:models'));
+  const pages = ui.buildModelPages(afterModel, settings);
+  assert.ok(pages.providers.some(row => row.id === 'model:provider:local' && row.editable));
+  assert.ok(pages.models.some(row => row.id === 'model:entry:local/fast' && row.editable));
 });
 
 test('defaults and enabled models flows write settings without touching models.json', async () => {

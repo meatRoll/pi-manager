@@ -12,7 +12,7 @@ import { createPublicationInspector } from './publication-status.js';
 import { errorCode, errorMessage } from './errors.js';
 import { displayProxy, proxySummary, setProxySettings } from './proxy.js';
 import { readModels, readSettings } from './model-config.js';
-import { addProviderFlow, buildModelRows, modelGlobalStatus, runModelAction } from './model-ui.js';
+import { addModelToProviderFlow, addProviderFlow, buildModelPages, modelGlobalStatus, runModelAction } from './model-ui.js';
 export function initialProfile(profiles, defaultProfile, loaded, published) {
     return [defaultProfile, loaded, published, profiles[0]?.name].find(name => name && profiles.some(profile => profile.name === name)) || undefined;
 }
@@ -121,10 +121,8 @@ export async function openManager(ctx, loaded) {
         }
     };
     const add = async (profile, tab) => {
-        if (tab === 'models') {
-            await addProviderFlow(ctx);
+        if (tab === 'models')
             return;
-        }
         const kind = tab === 'all' || tab === 'more' ? await choose(ctx, 'Add to staging', ['extensions', 'skills', 'context', 'packages', 'prompts', 'themes'].map(value => ({ label: value, value }))) : tab;
         if (!kind)
             return;
@@ -290,21 +288,25 @@ export async function openManager(ctx, loaded) {
                 toggle: resource.origin !== 'global', editable: resource.owned, deletable: resource.owned,
             };
         });
-        const makeModel = () => ({
-            profile: profile, loading: `loaded: ${loaded?.profile || 'manager only'} · next start: ${published?.profile || 'manager only'}`,
-            publication: status === 'checking' ? 'Checking publication in background… Current session unchanged'
-                : status === 'unpublished' ? 'Unpublished changes · P publish for next start' : status === 'unknown' ? 'Publication status unknown · R refresh / P publish' : loaded?.id === published?.id ? 'Published · staging only; external local packages remain references' : 'Published · restart Pi to load; current session unchanged',
-            pending: status === 'unknown' || status === 'checking' ? undefined : status === 'unpublished',
-            busy: !current,
-            globalDetail: modelGlobalStatus(modelsDoc, settingsDoc),
-            rows: {
-                all: resourceRows(), extensions: resourceRows('extensions'), skills: resourceRows('skills'),
-                context: resourceRows('context'), prompts: resourceRows('prompts'), themes: resourceRows('themes'),
-                packages: (current?.packages || []).map(pkg => ({ id: `package:${pkg.source}`, label: `[${pkg.enabled ? 'x' : ' '}] ${pkg.displayName}`, detail: pkg.version || 'local', toggle: true })),
-                models: buildModelRows(modelsDoc, settingsDoc),
-                more: moreEntries,
-            },
-        });
+        const makeModel = () => {
+            const modelPages = buildModelPages(modelsDoc, settingsDoc);
+            return {
+                profile: profile, loading: `loaded: ${loaded?.profile || 'manager only'} · next start: ${published?.profile || 'manager only'}`,
+                publication: status === 'checking' ? 'Checking publication in background… Current session unchanged'
+                    : status === 'unpublished' ? 'Unpublished changes · P publish for next start' : status === 'unknown' ? 'Publication status unknown · R refresh / P publish' : loaded?.id === published?.id ? 'Published · staging only; external local packages remain references' : 'Published · restart Pi to load; current session unchanged',
+                pending: status === 'unknown' || status === 'checking' ? undefined : status === 'unpublished',
+                busy: !current,
+                globalDetail: modelGlobalStatus(modelsDoc, settingsDoc),
+                modelPages,
+                rows: {
+                    all: resourceRows(), extensions: resourceRows('extensions'), skills: resourceRows('skills'),
+                    context: resourceRows('context'), prompts: resourceRows('prompts'), themes: resourceRows('themes'),
+                    packages: (current?.packages || []).map(pkg => ({ id: `package:${pkg.source}`, label: `[${pkg.enabled ? 'x' : ' '}] ${pkg.displayName}`, detail: pkg.version || 'local', toggle: true })),
+                    models: modelPages.root,
+                    more: moreEntries,
+                },
+            };
+        };
         const load = async (update, signal) => {
             if (!current) {
                 const result = await inventory(profile, { signal });
@@ -359,7 +361,10 @@ export async function openManager(ctx, loaded) {
             }
             else if (action.kind === 'add') {
                 if (state.tab === 'models') {
-                    await addProviderFlow(ctx);
+                    if (state.modelPage === 'models')
+                        await addModelToProviderFlow(ctx);
+                    else
+                        await addProviderFlow(ctx);
                     await refreshModelConfig();
                 }
                 else

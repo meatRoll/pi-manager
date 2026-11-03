@@ -163,6 +163,11 @@ The **Models** tab edits Pi's global model configuration, not the staging preset
 `~/.pi/agent/settings.json`. It is never copied into a publication and does not
 change the current session. Use **`/reload` or restart Pi** to apply changes.
 
+The tab opens with separate **Providers** and **Models** entries; **Enter** opens
+the list and **Esc** returns. Move **up from the first row** to focus the search
+box: type to filter, **Enter** leaves the box, and **Esc** clears the query or
+goes back. There is no `/` search shortcut.
+
 - Structured editors cover provider fields (`name`, `baseUrl`, `api`, headers,
   compatibility, OAuth, `authHeader`), models, and `modelOverrides`; an advanced
   JSON editor is available for the whole file, one provider/model, or one

@@ -17,7 +17,7 @@ import {
   DiscoveryError, describeDiscoveryPlan, fetchProviderModels, newDiscoveredModels, planDiscovery,
 } from './model-discovery.js';
 import type { DiscoveredModel, DiscoveryPlan } from './model-discovery.js';
-import type { DashboardEntry } from './dashboard.js';
+import type { DashboardEntry, ModelPage } from './dashboard.js';
 
 const API_OPTIONS = ['openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai', 'azure-openai-responses'];
 const THINKING_UNSET = '(unset)';
@@ -36,14 +36,14 @@ export function modelGlobalStatus(models: ConfigDocument<ModelsConfig>, settings
 
 export function buildModelRows(models: ConfigDocument<ModelsConfig>, settings: ConfigDocument<SettingsConfig>): DashboardEntry[] {
   const defaults = readModelDefaults(settings.value ?? {});
+  const providers = providersOf(models.value ?? {});
+  const modelCount = providers.reduce((total, [, provider]) => total + (provider.models?.length ?? 0), 0);
   const rows: DashboardEntry[] = [];
   const invalid = Boolean(models.error);
-  if (!invalid) rows.push({ id: 'model:add-provider', label: '+ Add provider…', detail: 'global models.json' });
-  rows.push({
-    id: 'model:raw',
-    label: 'Edit models.json (raw JSON)…',
-    detail: invalid ? 'invalid file; repair it here first' : 'contains API keys; visible while editing',
-  });
+  if (!invalid) {
+    rows.push({ id: 'model:page:providers', label: `Providers (${providers.length})…`, detail: 'global models.json' });
+    rows.push({ id: 'model:page:models', label: `Models (${modelCount})…`, detail: 'global models.json' });
+  }
   rows.push({
     id: 'model:defaults',
     label: `Defaults: ${defaultRef(defaults)}`,
@@ -54,31 +54,60 @@ export function buildModelRows(models: ConfigDocument<ModelsConfig>, settings: C
     label: `Enabled models: ${defaults.enabledModels?.length ? `${defaults.enabledModels.length} pattern${defaults.enabledModels.length === 1 ? '' : 's'}` : 'all models'}`,
     detail: 'startup selection and model cycling',
   });
-  if (invalid) return rows;
-  rows.push({ id: 'model:add-override', label: '+ Add model override…', detail: 'built-in or extension model' });
-  for (const [providerId, provider] of providersOf(models.value ?? {})) {
-    rows.push({
+  if (!invalid) rows.push({ id: 'model:add-override', label: '+ Add model override…', detail: 'built-in or extension model' });
+  rows.push({
+    id: 'model:raw',
+    label: 'Edit models.json (raw JSON)…',
+    detail: invalid ? 'invalid file; repair it here first' : 'contains API keys; visible while editing',
+  });
+  return rows;
+}
+
+export function buildProviderRows(models: ConfigDocument<ModelsConfig>): DashboardEntry[] {
+  if (models.error) return [{
+    id: 'model:raw',
+    label: 'Edit models.json (raw JSON)…',
+    detail: 'invalid file; repair it here first',
+  }];
+  return [
+    { id: 'model:add-provider', label: '+ Add provider…', detail: 'global models.json' },
+    ...providersOf(models.value ?? {}).map(([providerId, provider]): DashboardEntry => ({
       id: `model:provider:${providerId}`,
       label: provider.name || providerId,
       detail: `${provider.name && provider.name !== providerId ? `${providerId} · ` : ''}${providerDetail(provider)}`,
       editable: true,
-    });
+    })),
+  ];
+}
+
+export function buildModelListRows(models: ConfigDocument<ModelsConfig>): DashboardEntry[] {
+  if (models.error) return [{
+    id: 'model:raw',
+    label: 'Edit models.json (raw JSON)…',
+    detail: 'invalid file; repair it here first',
+  }];
+  const rows: DashboardEntry[] = [{ id: 'model:add-model', label: '+ Add model…', detail: 'choose a provider' }];
+  for (const [providerId, provider] of providersOf(models.value ?? {})) {
     for (const model of provider.models ?? []) {
       rows.push({
         id: `model:entry:${providerId}/${model.id}`,
-        label: `  ${model.name || model.id}`,
+        label: `${provider.name || providerId} / ${model.name || model.id}`,
         detail: `${model.name && model.name !== model.id ? `${model.id} · ` : ''}${modelDetail(model)}`,
         editable: true,
       });
     }
-    const overrides = Object.keys(provider.modelOverrides ?? {});
-    if (overrides.length) rows.push({
-      id: `model:overrides:${providerId}`,
-      label: `  Model overrides (${overrides.length})…`,
-      detail: 'fields merged over existing models',
-    });
   }
   return rows;
+}
+
+export function buildModelPages(
+  models: ConfigDocument<ModelsConfig>, settings: ConfigDocument<SettingsConfig>,
+): Record<ModelPage, DashboardEntry[]> {
+  return {
+    root: buildModelRows(models, settings),
+    providers: buildProviderRows(models),
+    models: buildModelListRows(models),
+  };
 }
 
 interface FormField<T> {
@@ -468,6 +497,27 @@ export async function addModelFlow(ctx: ExtensionCommandContext, providerId: str
   await editModel(ctx, providerId, {
     id, reasoning: false, input: ['text'], contextWindow: DEFAULT_CONTEXT_WINDOW, maxTokens: DEFAULT_MAX_TOKENS, cost: { ...DEFAULT_COST },
   }, true, base);
+}
+
+export async function addModelToProviderFlow(ctx: ExtensionCommandContext): Promise<void> {
+  const base = await readModels();
+  if (base.error) { ctx.ui.notify(base.error, 'error'); return; }
+  const providers = providersOf(requireModels(base));
+  if (!providers.length) { ctx.ui.notify('No providers. Add a provider first.', 'warning'); return; }
+  let providerId: string | undefined;
+  if (providers.length === 1) providerId = providers[0][0];
+  else {
+    const selected = await choose<string>(ctx, 'Add model — provider', [
+      ...providers.map(([id, provider]) => ({
+        label: `${provider.name || id}${provider.name && provider.name !== id ? ` (${id})` : ''}`,
+        value: id,
+      })),
+      { label: 'Cancel', value: ':cancel' },
+    ]);
+    if (!selected || selected === ':cancel') return;
+    providerId = selected;
+  }
+  await addModelFlow(ctx, providerId);
 }
 
 export async function addOverrideFlow(ctx: ExtensionCommandContext): Promise<void> {
@@ -959,6 +1009,7 @@ export async function enabledFlow(ctx: ExtensionCommandContext): Promise<void> {
 
 export async function runModelAction(ctx: ExtensionCommandContext, id: string, kind: 'open' | 'toggle' | 'edit' | 'delete' = 'open'): Promise<void> {
   if (id === 'model:add-provider') return addProviderFlow(ctx);
+  if (id === 'model:add-model') return addModelToProviderFlow(ctx);
   if (id === 'model:raw') return editModelsJsonFlow(ctx);
   if (id === 'model:defaults') return defaultsFlow(ctx);
   if (id === 'model:enabled') return enabledFlow(ctx);

@@ -14,15 +14,22 @@ const extraTabs = [
     { id: 'prompts', label: 'Prompt templates', short: 'Prompts' },
     { id: 'themes', label: 'Themes', short: 'Themes' },
 ];
-export const newDashboardState = () => ({ tab: 'all', views: {} });
+export const newDashboardState = () => ({ tab: 'all', modelPage: 'root', views: {} });
 const lineText = (text) => plain(text).replace(/[\r\n\t]/g, ' ');
 const tabLabel = (tab) => [...tabs, ...extraTabs].find(item => item.id === tab).label;
+const modelPageLabel = (page) => page === 'providers' ? ' / Providers' : page === 'models' ? ' / Models' : '';
+const modelPageFromId = (id) => id === 'model:page:root' ? 'root'
+    : id === 'model:page:providers' ? 'providers'
+        : id === 'model:page:models' ? 'models' : undefined;
 /** Show the native shell immediately; read-only discovery/checks may update it.
  * Disk mutations still happen only after this interaction closes.
  */
 export async function dashboard(ctx, model, state, load) {
     const controller = new AbortController();
     let background = Promise.resolve();
+    const pageRows = () => state.tab === 'models'
+        ? model.modelPages?.[state.modelPage] ?? model.rows.models
+        : model.rows[state.tab];
     const rpc = async () => {
         // RPC clients cannot render custom components or forward panel shortcuts.
         // Keep the same flat rows and offer explicit navigation/actions as dialogs.
@@ -37,20 +44,31 @@ export async function dashboard(ctx, model, state, load) {
             }).catch(() => { });
         while (true) {
             const action = await choose(ctx, state.tab === 'models'
-                ? `pi-manager / ${model.profile} / ${tabLabel(state.tab)} — global\nmodels.json is not part of presets\n${model.globalDetail || ''}`
+                ? `pi-manager / ${model.profile} / ${tabLabel(state.tab)}${modelPageLabel(state.modelPage)} — global\nmodels.json is not part of presets\n${model.globalDetail || ''}`
                 : `pi-manager / ${model.profile} / ${tabLabel(state.tab)} — staging\n${model.loading}\n${model.publication}`, [
                 ...[...tabs, ...extraTabs].filter(tab => tab.id !== state.tab).map(tab => ({ label: `Tab: ${tab.label}`, value: { tab: tab.id } })),
                 ...(state.tab === 'models' ? [] : [{ label: 'Switch preset', value: { kind: 'switch' } }]),
                 state.tab === 'models'
-                    ? { label: '+ Add provider', value: { kind: 'add' } }
+                    ? { label: state.modelPage === 'models' ? '+ Add model' : '+ Add provider', value: { kind: 'add' } }
                     : { label: '+ Add resource / package', value: { kind: 'add' } },
+                ...(state.tab === 'models' && state.modelPage !== 'root'
+                    ? [{ label: 'Back to Models', value: { kind: 'open', id: 'model:page:root' } }]
+                    : []),
                 ...(state.tab === 'models' ? [] : [{ label: 'Publish for next Pi start', value: { kind: 'publish' } }]),
                 { label: state.tab === 'models' ? 'Refresh model config' : 'Refresh staging metadata', value: { kind: 'refresh' } },
-                ...model.rows[state.tab].map(row => ({ label: `${row.label}${row.detail ? ` · ${row.detail}` : ''}`, value: { kind: 'open', id: row.id } })),
+                ...pageRows().map(row => ({ label: `${row.label}${row.detail ? ` · ${row.detail}` : ''}`, value: { kind: 'open', id: row.id } })),
             ]);
             if (action && 'tab' in action) {
                 state.tab = action.tab;
+                state.modelPage = 'root';
                 continue;
+            }
+            if (action?.kind === 'open') {
+                const page = modelPageFromId(action.id);
+                if (page) {
+                    state.modelPage = page;
+                    continue;
+                }
             }
             return action;
         }
@@ -61,7 +79,11 @@ export async function dashboard(ctx, model, state, load) {
         let filtered = [];
         let list;
         const input = new Input();
-        const currentView = () => state.views[state.tab] ||= { query: '' };
+        const viewKey = () => state.tab === 'models' ? `models:${state.modelPage}` : state.tab;
+        const pageRows = () => state.tab === 'models'
+            ? model.modelPages?.[state.modelPage] ?? model.rows.models
+            : model.rows[state.tab];
+        const currentView = () => state.views[viewKey()] ||= { query: '' };
         const selected = () => filtered.find(row => row.id === list.getSelectedItem()?.value);
         const saveSelection = () => { currentView().selected = list.getSelectedItem()?.value; };
         const finish = (result) => {
@@ -74,7 +96,7 @@ export async function dashboard(ctx, model, state, load) {
         };
         const rebuild = () => {
             const view = currentView(), query = view.query.toLowerCase();
-            filtered = model.rows[state.tab].filter(row => lineText(`${row.label} ${row.detail || ''}`).toLowerCase().includes(query));
+            filtered = pageRows().filter(row => lineText(`${row.label} ${row.detail || ''}`).toLowerCase().includes(query));
             listHeight = height;
             list = new SelectList(filtered.map(row => ({ value: row.id, label: lineText(row.label), description: row.detail ? lineText(row.detail) : undefined })), height, {
                 selectedPrefix: text => theme.fg('accent', text), selectedText: text => theme.fg('accent', text),
@@ -90,6 +112,7 @@ export async function dashboard(ctx, model, state, load) {
             const available = [...tabs, ...extraTabs.filter(tab => tab.id === state.tab)];
             const index = available.findIndex(tab => tab.id === state.tab);
             state.tab = available[(index + offset + available.length) % available.length].id;
+            state.modelPage = 'root';
             searching = false;
             input.focused = false;
             input.setValue(currentView().query);
@@ -100,6 +123,14 @@ export async function dashboard(ctx, model, state, load) {
             list.setSelectedIndex(Math.max(0, Math.min(filtered.length - 1, index + offset)));
             saveSelection();
         };
+        const setModelPage = (page) => {
+            saveSelection();
+            state.modelPage = page;
+            searching = false;
+            input.focused = false;
+            input.setValue(currentView().query);
+            rebuild();
+        };
         // Keys are contextual: a package row opens a package menu, \`more\` rows run
         // actions, and only resource rows can be toggled/edited/deleted. Showing one
         // static footer made every category look identical.
@@ -107,8 +138,10 @@ export async function dashboard(ctx, model, state, load) {
             const line = (items) => items.filter(Boolean).join(' · ');
             const compact = width < 50;
             const presetKey = state.tab === 'models' ? [] : ['S preset'];
+            const modelsPage = state.tab === 'models' && state.modelPage !== 'root';
+            const closeKey = modelsPage ? 'Esc back' : 'Esc close';
             const panel = state.tab === 'models'
-                ? ['A add provider', 'R reload file']
+                ? [state.modelPage === 'models' ? 'A add model' : 'A add provider', 'R reload file']
                 : model.busy || model.error ? [] : ['A add', 'P publish'];
             const rowKeys = !row ? [] : state.tab === 'models'
                 ? ['Enter open', row.editable ? 'E edit' : '']
@@ -118,10 +151,10 @@ export async function dashboard(ctx, model, state, load) {
                         ? ['Enter run action']
                         : [row.toggle ? 'Space toggle' : '', compact ? 'Enter actions' : 'Enter preview / actions', row.editable ? 'E edit' : '', row.deletable ? 'Del delete' : ''];
             const lines = compact
-                ? [[`[${tabLabel(state.tab)}]`, '←→ Tab', '↑↓ select'], rowKeys, [...panel, ...presetKey, '/ search', 'Esc']]
+                ? [[`[${tabLabel(state.tab)}]`, '←→ Tab', '↑↓ select'], rowKeys, [...panel, ...presetKey, '↑ search', closeKey]]
                 : state.tab === 'models'
-                    ? [['↑↓ select', '←→ / Tab category', ...rowKeys], [...panel, '/ search', 'Esc close']]
-                    : [['↑↓ select', '←→ / Tab category', ...rowKeys], [...panel, 'S switch preset', 'R refresh', '/ search', 'Esc close']];
+                    ? [['↑↓ select', '←→ / Tab category', ...rowKeys], [...panel, '↑ search', closeKey]]
+                    : [['↑↓ select', '←→ / Tab category', ...rowKeys], [...panel, 'S switch preset', 'R refresh', '↑ search', 'Esc close']];
             return lines.map(line).filter(Boolean).flatMap(text => wrapTextWithAnsi(text, width));
         };
         const renderTabs = (width) => {
@@ -160,12 +193,12 @@ export async function dashboard(ctx, model, state, load) {
                 width = Math.max(1, width);
                 const rowForHints = selected();
                 const hints = hintLines(rowForHints, width);
-                const header = [theme.fg('accent', `pi-manager / ${model.profile}${state.tab === 'models' ? ' (global)' : '    [S switch preset]'}`),
+                const header = [theme.fg('accent', `pi-manager / ${model.profile}${state.tab === 'models' ? ` (global)${modelPageLabel(state.modelPage)}` : '    [S switch preset]'}`),
                     ...(state.tab === 'models'
                         ? [theme.fg('muted', lineText(model.globalDetail || 'global model configuration'))]
                         : [theme.fg('muted', lineText(model.loading)), theme.fg(model.pending ? 'warning' : 'muted', lineText(model.publication))]),
                     renderTabs(width),
-                    ...(searching ? input.render(width) : [theme.fg('dim', `Search: ${lineText(currentView().query) || '( / to search )'}`)]), ''];
+                    ...(searching ? input.render(width) : [theme.fg('dim', `Search: ${lineText(currentView().query) || '( ↑ from first row )'}`)]), ''];
                 // Leave room for Pi's editor/footer and the SelectList scroll indicator.
                 height = Math.max(1, Math.min(12, (process.stdout.rows || 24) - header.length - hints.length - 8));
                 if (height !== listHeight)
@@ -175,7 +208,7 @@ export async function dashboard(ctx, model, state, load) {
                     : model.busy ? 'Reading resource metadata… You can change category, search, or press Esc.'
                         : currentView().query ? 'No matching entries. Esc clears search.'
                             : state.tab === 'packages' ? 'No packages. Press A to add one.'
-                                : state.tab === 'models' ? 'No providers. Press A to add one.'
+                                : state.tab === 'models' ? (state.modelPage === 'models' ? 'No models. Press A to add one.' : 'No providers. Press A to add one.')
                                     : state.tab === 'more' ? 'No actions.' : 'No entries. Press A to add a resource.';
                 return [...header, ...(filtered.length ? list.render(width) : [theme.fg(model.error ? 'warning' : 'dim', empty)]), '',
                     theme.fg('muted', row ? `${lineText(row.label)}${row.detail ? ` · ${lineText(row.detail)}` : ''}` : ''),
@@ -196,6 +229,8 @@ export async function dashboard(ctx, model, state, load) {
                         currentView().query = '';
                         rebuild();
                     }
+                    else if (state.tab === 'models' && state.modelPage !== 'root')
+                        setModelPage('root');
                     else
                         finish(undefined);
                 }
@@ -203,26 +238,41 @@ export async function dashboard(ctx, model, state, load) {
                     searching = false;
                     input.focused = false;
                 }
-                else if (searching && !up && !down && !pageUp && !pageDown) {
+                else if (searching && (up || down || pageUp || pageDown)) {
+                    searching = false;
+                    input.focused = false;
+                }
+                else if (searching) {
                     input.handleInput(data);
                     currentView().query = input.getValue();
                     rebuild();
                 }
-                else if (up || down || pageUp || pageDown)
-                    move(up ? -1 : down ? 1 : pageUp ? -height : height);
+                else if (up) {
+                    const index = filtered.findIndex(row => row.id === list.getSelectedItem()?.value);
+                    if (index <= 0) {
+                        searching = true;
+                        input.focused = focused;
+                        input.setValue(currentView().query);
+                    }
+                    else
+                        move(-1);
+                }
+                else if (down || pageUp || pageDown)
+                    move(down ? 1 : pageUp ? -height : height);
                 else if (keys.matches(data, 'tui.select.confirm')) {
                     const row = selected();
-                    if (row)
-                        finish({ kind: 'open', id: row.id });
+                    if (row) {
+                        const page = modelPageFromId(row.id);
+                        if (page)
+                            setModelPage(page);
+                        else
+                            finish({ kind: 'open', id: row.id });
+                    }
                 }
                 else if (matchesKey(data, Key.right) || matchesKey(data, Key.tab))
                     changeTab(1);
                 else if (matchesKey(data, Key.left) || matchesKey(data, Key.shift(Key.tab)))
                     changeTab(-1);
-                else if (matchesKey(data, Key.slash)) {
-                    searching = true;
-                    input.focused = focused;
-                }
                 else if ((state.tab === 'models' || (!model.busy && !model.error)) && (matchesKey(data, 'a') || matchesKey(data, Key.shift('a'))))
                     finish({ kind: 'add' });
                 else if (state.tab !== 'models' && !model.busy && !model.error && (matchesKey(data, 'p') || matchesKey(data, Key.shift('p'))))
