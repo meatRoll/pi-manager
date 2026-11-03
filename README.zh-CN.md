@@ -156,6 +156,7 @@ Space toggle · Enter preview · E edit · A add · P publish
 **`/reload` 或重启 Pi** 后生效。
 
 Models 首页分别提供 **Providers** 和 **Models** 入口，**Enter** 进入列表，**Esc** 返回。
+添加 provider/model 使用 **A** 快捷键，不再作为列表选项，因此列表为空时 **A** 仍可使用。
 列表页在第一行按 **↑** 可把光标移到搜索框：输入即过滤，**Enter** 退出搜索框，**Esc**
 清空搜索或返回上一级；编辑和操作菜单不显示搜索框，也不再使用 `/` 搜索快捷键。
 

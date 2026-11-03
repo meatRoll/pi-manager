@@ -22,6 +22,7 @@ alter the current session.
 ### Features
 
 - The **Models** tab opens with separate **Providers** and **Models** pages.
+  Add providers/models with **A** instead of list rows, including on empty lists.
   List pages focus search with Up from the first row; edit and action menus omit
   search, and `/` is no longer a shortcut.
 - Manage providers, models, and `modelOverrides` with structured forms or

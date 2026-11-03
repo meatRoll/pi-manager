@@ -50,15 +50,12 @@ export function buildProviderRows(models) {
                 label: 'Edit models.json (raw JSON)…',
                 detail: 'invalid file; repair it here first',
             }];
-    return [
-        { id: 'model:add-provider', label: '+ Add provider…', detail: 'global models.json' },
-        ...providersOf(models.value ?? {}).map(([providerId, provider]) => ({
-            id: `model:provider:${providerId}`,
-            label: provider.name || providerId,
-            detail: `${provider.name && provider.name !== providerId ? `${providerId} · ` : ''}${providerDetail(provider)}`,
-            editable: true,
-        })),
-    ];
+    return providersOf(models.value ?? {}).map(([providerId, provider]) => ({
+        id: `model:provider:${providerId}`,
+        label: provider.name || providerId,
+        detail: `${provider.name && provider.name !== providerId ? `${providerId} · ` : ''}${providerDetail(provider)}`,
+        editable: true,
+    }));
 }
 export function buildModelListRows(models) {
     if (models.error)
@@ -67,7 +64,7 @@ export function buildModelListRows(models) {
                 label: 'Edit models.json (raw JSON)…',
                 detail: 'invalid file; repair it here first',
             }];
-    const rows = [{ id: 'model:add-model', label: '+ Add model…', detail: 'choose a provider' }];
+    const rows = [];
     for (const [providerId, provider] of providersOf(models.value ?? {})) {
         for (const model of provider.models ?? []) {
             rows.push({

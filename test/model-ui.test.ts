@@ -81,8 +81,8 @@ test('model rows expose global controls and provider/model entries', async () =>
   ]);
   const pages = ui.buildModelPages(models, settings);
   assert.deepEqual(pages.root.map(row => row.id), ui.buildModelRows(models, settings).map(row => row.id));
-  assert.deepEqual(pages.providers.map(row => row.id), ['model:add-provider']);
-  assert.deepEqual(pages.models.map(row => row.id), ['model:add-model']);
+  assert.deepEqual(pages.providers, []);
+  assert.deepEqual(pages.models, []);
   assert.match(ui.modelGlobalStatus(models, settings), /0 providers · 0 models · default \(not set\)/);
   assert.match(ui.modelGlobalStatus(models, settings), /\/reload or restart/);
 });

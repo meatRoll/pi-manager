@@ -206,11 +206,9 @@ test('Models tab groups providers and models into pages and keeps preset actions
       { id: 'model:raw', label: 'Edit models.json (raw JSON)…' },
     ],
     providers: [
-      { id: 'model:add-provider', label: '+ Add provider…' },
       { id: 'model:provider:local', label: 'Local relay', detail: 'openai-completions · 1 model', editable: true },
     ],
     models: [
-      { id: 'model:add-model', label: '+ Add model…' },
       { id: 'model:entry:local/fast', label: 'Local relay / Fast', detail: 'fast · 200K ctx · reasoning', editable: true },
     ],
   };
@@ -234,6 +232,7 @@ test('Models tab groups providers and models into pages and keeps preset actions
   rendered = component.render(100).join('\n');
   assert.match(rendered, /\(global\) \/ Providers/);
   assert.match(rendered, /Local relay/);
+  assert.doesNotMatch(rendered, /\+ Add provider/);
   assert.match(rendered, /A add provider/);
 
   component.handleInput!('\x1b'); // back to Models root
@@ -247,7 +246,7 @@ test('Models tab groups providers and models into pages and keeps preset actions
   assert.equal(state.modelPage, 'models');
   rendered = component.render(100).join('\n');
   assert.match(rendered, /\(global\) \/ Models/);
-  assert.match(rendered, /Add model/);
+  assert.doesNotMatch(rendered, /\+ Add model/);
   assert.match(rendered, /A add model/);
   assert.match(rendered, /Local relay \/ Fast/);
   component.handleInput!('\x1b'); // back to root
@@ -296,4 +295,30 @@ test('Models tab groups providers and models into pages and keeps preset actions
   assert.equal(optionsSeen[1].some(option => option.includes('+ Add model')), false);
   assert.equal(optionsSeen[3].some(option => option.includes('Publish')), true);
   assert.equal(optionsSeen[3].some(option => option.includes('Switch preset')), true);
+});
+
+test('Models add shortcuts work when provider and model lists are empty', async () => {
+  const model = fixture();
+  model.modelPages = {
+    root: [
+      { id: 'model:page:providers', label: 'Providers (0)…' },
+      { id: 'model:page:models', label: 'Models (0)…' },
+    ],
+    providers: [], models: [],
+  };
+  model.rows.models = model.modelPages.root;
+  for (const page of ['providers', 'models'] as const) {
+    const state = newDashboardState(); state.tab = 'models'; state.modelPage = page;
+    const h = host(); const result = dashboard(h.ctx, model, state);
+    const component = h.component(); component.focused = true;
+    const rendered = component.render(100).join('\n');
+    assert.match(rendered, page === 'providers' ? /No providers\. Press A to add one/ : /No models\. Press A to add one/);
+    assert.match(rendered, page === 'providers' ? /A add provider/ : /A add model/);
+    component.handleInput!('\x1b[A'); // empty lists can still focus search
+    component.handleInput!('missing');
+    assert.match(component.render(100).join('\n'), /No matching entries/);
+    component.handleInput!('\x1b[B'); // Down leaves search even with no rows
+    component.handleInput!('a');
+    assert.deepEqual(await result, { kind: 'add' });
+  }
 });
