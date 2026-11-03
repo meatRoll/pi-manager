@@ -13,10 +13,11 @@ import { errorCode } from './errors.js';
 import { VERSION } from './version.js';
 import type { PackageEntry, PiResourceType, PiSdk, PublishedDeclaration, Resource, ResourceType } from './types.js';
 
-/** Pi agent directory a publication activates into. Resolved locally instead of
- * importing migration.ts, which already depends on this module.
+/** Pi agent directory a publication activates into, and where Pi installs the
+ * declared packages. Resolved locally instead of importing migration.ts, which
+ * already depends on this module.
  */
-function defaultAgentDir(): string {
+export function piAgentDir(): string {
   return resolve(resolveSourcePath(process.env.PI_MANAGER_SOURCE_AGENT_DIR
     || process.env.PI_CODING_AGENT_DIR
     || join(homedir(), '.pi', 'agent')));
@@ -296,7 +297,7 @@ async function buildBundle(profile: string | null, options: PublishOptions = {})
         declarationEntries(loaded.declarations ?? []),
         loaded.superseded ?? [],
         {
-          agentDir: options.agentDir ?? defaultAgentDir(),
+          agentDir: options.agentDir ?? piAgentDir(),
           cwd: options.cwd ?? process.cwd(),
           install: options.install !== false,
           sdk: options.sdk,

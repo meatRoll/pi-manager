@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.7.1 — Published refs are the refs Pi actually runs
+
+Two gaps in v1.6.0's declarations could leave the running checkout different from
+the publication without saying so.
+
+- The installer now reconciles pinned checkouts (`install: true`). Before, a
+  `pi install` run republished the declarations but left Pi's copy at whatever
+  commit an outside install or manual pull had left it on.
+- Publication status compares each pinned Git commit with the checkout Pi loads.
+  A drifted copy now reads as **unpublished** instead of claiming the preset is
+  current, so `P` re-aligns it.
+
 ## v1.7.0 — Pi model configuration is managed from one place
 
 The new **Models** tab and `pi-manager models` CLI edit Pi's global

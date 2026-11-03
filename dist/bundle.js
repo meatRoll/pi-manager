@@ -11,10 +11,11 @@ import { planDeclarations, activateDeclarations, declarationEntries } from './de
 import { homedir } from 'node:os';
 import { errorCode } from './errors.js';
 import { VERSION } from './version.js';
-/** Pi agent directory a publication activates into. Resolved locally instead of
- * importing migration.ts, which already depends on this module.
+/** Pi agent directory a publication activates into, and where Pi installs the
+ * declared packages. Resolved locally instead of importing migration.ts, which
+ * already depends on this module.
  */
-function defaultAgentDir() {
+export function piAgentDir() {
     return resolve(resolveSourcePath(process.env.PI_MANAGER_SOURCE_AGENT_DIR
         || process.env.PI_CODING_AGENT_DIR
         || join(homedir(), '.pi', 'agent')));
@@ -252,7 +253,7 @@ async function buildBundle(profile, options = {}) {
         // failure the previous publication stays active and the snapshot is removed.
         if (options.activate) {
             await activateDeclarations(declarationEntries(loaded.declarations ?? []), loaded.superseded ?? [], {
-                agentDir: options.agentDir ?? defaultAgentDir(),
+                agentDir: options.agentDir ?? piAgentDir(),
                 cwd: options.cwd ?? process.cwd(),
                 install: options.install !== false,
                 sdk: options.sdk,

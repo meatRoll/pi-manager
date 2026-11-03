@@ -75,17 +75,16 @@ export async function installPiExtension(acknowledged = false): Promise<void> {
   let published: Awaited<ReturnType<typeof publishBundle>> | null = null;
   try {
     published = await publishBundle((await publishedBundle())?.profile || null, {
-      activate: true, install: false, agentDir: sourcePiAgentDir(), cwd: process.cwd(),
+      activate: true, install: true, agentDir: sourcePiAgentDir(), cwd: process.cwd(),
     });
   } catch (error) { republishWarning = `Left the existing publication untouched: ${errorMessage(error)}`; }
   const remembered = await rememberPublishDir();
   const code = await run(pi, ['install', BUNDLE_DIR], { env });
   if (code !== 0) throw new Error(`pi install exited ${code}`);
   registered.push(BUNDLE_DIR);
-  // Declare the preset's packages where Pi reads them. Format 1 publications
-  // carried copied files instead and have nothing to declare. Installation is
-  // skipped here: Pi resolves new declarations on its next start, and a publish
-  // from /manager has already reconciled them.
+  // Repair the declarations without touching checkouts: publishing already
+  // reconciled them, and this pass only exists for an older or interrupted
+  // publication. Format 1 publications carry copied files and have nothing.
   const activation = published
     ? await applyPublishedDeclarations(published, { agentDir: sourcePiAgentDir(), cwd: process.cwd(), install: false })
     : undefined;

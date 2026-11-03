@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import { lstat, readdir, readFile, readlink, open } from 'node:fs/promises';
 import { join, relative } from 'node:path';
-import { BUNDLE_DIR, carriedResources, isManagerOrBundle } from './bundle.js';
-import { planDeclarations } from './declarations.js';
+import { BUNDLE_DIR, carriedResources, isManagerOrBundle, piAgentDir } from './bundle.js';
+import { gitCommit, planDeclarations } from './declarations.js';
+import { gitRepositoryParts } from './package-label.js';
 import { getSettings, getMetadata } from './core.js';
 import { absoluteEntries, generationDigest, generationPath } from './generations.js';
 import { packageState } from './package-state.js';
@@ -105,6 +106,21 @@ export function createPublicationInspector() {
                 const actual = planned.declarations.map(item => item.pinned).sort();
                 if (JSON.stringify(actual) !== JSON.stringify(expected))
                     return 'unpublished';
+                // The publication is only real if the checkout Pi loads is the pinned
+                // commit. An outside install or a manual pull moves it silently, and Pi
+                // would keep loading that copy without saying so.
+                const agentDir = piAgentDir();
+                for (const item of planned.declarations) {
+                    if (item.kind !== 'git' || !item.ref)
+                        continue;
+                    const parts = gitRepositoryParts(item.pinned);
+                    if (!parts)
+                        continue;
+                    const checkout = join(agentDir, 'git', parts.host, parts.path);
+                    const checked = await gitCommit(checkout).catch(() => undefined);
+                    if (checked && checked !== item.ref)
+                        return 'unpublished';
+                }
             }
             const contexts = [];
             for (const resource of current.resources.filter(resource => resource.type === 'context' && resource.enabled)) {
