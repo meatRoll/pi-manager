@@ -2,9 +2,9 @@
 
 [English](README.md) | **简体中文**
 
-**v1.5.0 — 包下载可以走受管代理。** [版本说明](CHANGELOG.md#简体中文) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
+**v1.7.0 — 在 Models 分类或 CLI 中统一管理 Pi 的供应商、模型、默认项和 enabledModels。** [版本说明](CHANGELOG.md#简体中文) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
 
-一个**在 Pi 里面使用的扩展**，管理插件包、Skills、Extensions、提示词模板、主题和预置 Markdown 上下文。
+一个**在 Pi 里面使用的扩展**，管理插件包、Skills、Extensions、提示词模板、主题、预置 Markdown 上下文，以及 Pi 的全局模型配置。
 
 ```text
 启动 Pi → 输入 /manager → 管理资源 → 返回当前对话
@@ -122,7 +122,7 @@ pi-manager / mine                         [S switch preset]
 loaded: mine · next start: mine
 Unpublished changes · P publish for next start
 
-[All]  Extensions  Skills  Context  Packages  More
+[All]  Extensions  Skills  Context  Packages  Models  More
 
 [x] meatRoll/pi-inspect-image · src/index.ts   extensions · package · 1.0.0 · read-only
 [x] handoff.ts                             extensions · standalone · owned
@@ -138,6 +138,7 @@ Space toggle · Enter preview · E edit · A add · P publish
 - **空格**直接启停所选资源/包，只改暂存。**Enter**直接预览资源，选中包则打开操作菜单。**E** 编辑管理器副本；**Del** 确认后删除副本。外部/包内原文件仍只读。
 - **←→** 或 **Tab / Shift+Tab** 在同一页切换分类。**/** 搜索（Enter 结束输入，再按一次打开）；每个分类在预览、编辑、启停后保留选中项和搜索条件。**Esc** 先清空搜索，再退出。预览支持 `↑↓`、`PgUp` / `PgDn`。
 - **A** 向当前分类添加；**P** 确认后发布。其他进程修改后按 **R** 刷新。终端面板先显示，资源发现与完整内容比较放在后台；资源列表先可操作，检查结束前标题显示 **Checking publication…**，之后再提示未发布修改或无法确定的状态，不冒充当前会话已生效。关闭或切换会取消只读检查。本地外部包只是引用，不追踪历史副本。
+- **Models** 编辑 Pi 的**全局**模型配置，不属于暂存预设；底部快捷键为 `A 添加供应商 · R 重新读取文件`，不参与发布，执行 `/reload` 或重启 Pi 后才生效。详见[模型与供应商](#模型与供应商全局不随预设发布)。
 - **More** 收拢模板、主题、预设管理/默认项、包导入、全部更新、恢复、日志、网络代理、复制/删除、manager-only 发布及说明。
 - RPC 客户端使用同样的扁平资源列表，通过明确的分类/操作对话框交互，不依赖终端快捷键。首个列表只等资源 metadata，不再等待完整内容比较；RPC 无法修改已经打开的对话框，检查结果会在下次对话框中显示。
 - 包内 Extension 显示为 `包标签 · src/index.ts`，便于区分同名入口。Git 包优先使用**实际配置的仓库**（如 `meatRoll/pi-image-gen`），不使用可能残留的上游 manifest 名称；非 GitHub 来源保留主机名。npm 包使用配置中的包名（保留 scope）；本地包若有独立 Git 仓库，则只读使用其 `origin` 仓库标签（不访问网络）；否则使用 manifest 名称或配置路径，不会借用父目录仓库或可能残留的 manifest 仓库 URL。包列表保持相同标签，原始 manifest 名称仍可在包详情中查看。独立文件名不变；这些只是显示标签，不会重命名文件、修改来源或改变资源 ID。
@@ -146,6 +147,51 @@ Space toggle · Enter preview · E edit · A add · P publish
 - Pi 自己发现的用户级资源（例如 `~/.agents/skills`）显示为 `user-level · read-only`：不能在预设里启停或编辑，发布时也不导出——Pi 每次启动都会自己加载，这样快照保持自包含。
 - 包来源支持 `npm:name@version`、`git:github.com/owner/repo@ref`、本地路径。本地包是**外部引用**，不复制、不安装依赖、不删除其原目录。
 - 包操作和删除需确认。安装脚本仍有当前用户权限。
+
+### 模型与供应商（全局，不随预设发布）
+
+**Models** 分类编辑 Pi 的全局模型配置，不属于暂存预设：
+`~/.pi/agent/models.json`（或 `$PI_CODING_AGENT_DIR/models.json`）和
+`~/.pi/agent/settings.json`。它不会进入发布快照，也不会改变当前会话；执行
+**`/reload` 或重启 Pi** 后生效。
+
+- 结构化表单覆盖供应商字段（`name`、`baseUrl`、`api`、headers、compat、
+  OAuth、`authHeader`）、模型和 `modelOverrides`；也提供整份文件、单个供应商/模型或
+  单个 override 的高级 JSON 编辑。未知字段会保留。
+- API key 支持 literal、`$ENV_VAR` 和 `!command`。`!command` 会在 Pi 解析密钥时
+  **在本机执行**；接受前编辑器会明确提示。仅输入你信任的命令。
+- **Defaults** 修改新会话的 `defaultProvider`、`defaultModel` 和
+  `defaultThinkingLevel`。**Enabled models** 修改 `enabledModels`，只影响启动选择和
+  模型循环；`/model` 仍会列出所有可用模型。
+- **Test endpoint…** 只发送 `GET {baseUrl}/models`（Anthropic 兼容供应商的 base URL 不含
+  `/v1` 时使用 `/v1/models`；也可指定自定义 URL），返回模型列表；不会发送对话请求。
+- **Fetch models from endpoint…** 拉取同一列表后让你勾选要添加的模型。默认一个都不选，
+  `A` 全选新模型；已配置模型显示为禁用项。能推断的元数据会自动填入，缺失时回退为
+  `contextWindow` 128000、`maxTokens` 16384、input `text`、reasoning `false`、cost 全 0。
+- 读取时接受 Pi 风格的 `//` 注释和尾随逗号；结构化保存会写成规范 JSON（原始文件在备份中）。
+  写入是原子替换，权限 0600，并在 `~/.pi-manager/backups/agent` 保留带时间戳的备份
+  （默认 10 份）。如果打开表单后文件被其他进程修改，保存会失败并提示重新加载，不会覆盖；
+  配置文件的 symlink 会被拒绝。
+- 网络请求只在用户显式操作时发生。OAuth 供应商不支持自动发现，请手动添加模型或使用
+  供应商的登录流程。不修改 `auth.json` 和 `models-store.json`。
+
+CLI 提供同样能力：
+
+```bash
+pi-manager models
+pi-manager models list [--json] [--reveal]
+pi-manager models provider add local --base-url https://example.com/v1 \
+  --api openai-completions --api-key-env LOCAL_KEY
+pi-manager models add local --id fast --context-window 200000 --max-tokens 32000 \
+  --input text,image --reasoning
+pi-manager models default local fast --thinking high
+pi-manager models enabled add 'local/*'
+pi-manager models provider test local
+pi-manager models provider fetch local --add new --yes
+```
+
+`--reveal` 会输出 literal key；`!command` 认证下的 `provider test/fetch` 需要
+`--yes`。更新、删除、override 和 `edit-json` 的参数见 `pi-manager models --help`。
 
 ### 编辑 → 发布 → 重启
 
@@ -227,6 +273,7 @@ node dist/index.js migrate mine --yes
 ```text
 ~/.pi-manager/
 ├── state.json
+├── backups/agent/                  models.json/settings.json 时间戳备份
 ├── profiles/<name>/
 │   ├── settings.json              暂存包声明和资源过滤器
 │   ├── manager.json               上下文及管理器 metadata
@@ -238,9 +285,9 @@ node dist/index.js migrate mine --yes
     └── .snapshots/<id>/           独立包/资源文件和上下文
 ```
 
-**安装是“不改默认 Pi settings”的明确例外**：官方 `pi install` 增加本地管理器包声明。注册后的管理操作写自己的目录，不反复改默认 Pi settings。
+**安装和 Models 分类是“不改默认 Pi settings”的明确例外**：官方 `pi install` 增加本地管理器包声明，发布也会写入包声明。Models 分类另外写入 `~/.pi/agent/models.json` 和 `settings.json`（或 `$PI_CODING_AGENT_DIR`），使用原子替换、`~/.pi-manager/backups/agent` 备份和版本冲突校验。其他管理操作写自己的目录。
 
-扩展不会自动导入默认 Pi 的资源；明确执行的包导入对来源只读。不改外部原文件、项目 `.pi`、父 shell 环境、Pi 源码/安装目录，也不复制凭证。npm/Git 缓存和第三方脚本仍可能在外部写入。
+扩展不会自动导入默认 Pi 的资源；明确执行的包导入对来源只读。不改外部原文件、项目 `.pi`、父 shell 环境、Pi 源码/安装目录，也不复制凭证或修改 `auth.json`/`models-store.json`。npm/Git 缓存和第三方脚本仍可能在外部写入。
 
 当前 Pi 继续使用它自己的登录和会话。旧 CLI 隔离 profile 中的凭证、会话不会自动被 Pi 内扩展采用或共享。旧启动器正在使用某个暂存目录时，管理器锁仍会拒绝修改；无法可靠检测外部手动启动的进程。
 
@@ -272,7 +319,7 @@ node dist/index.js package versions review
 node dist/index.js package rollback review --yes
 ```
 
-旧独立 TUI 显式使用 `node dist/index.js tui`，CLI 不带参数改为显示帮助。旧 `profile run` 仍可启动隔离子进程，但 `/manager` 扩展不会调用它。CLI 修改同样需要回到 `/manager` 发布，才能影响注册的预设。
+旧独立 TUI 显式使用 `node dist/index.js tui`，CLI 不带参数改为显示帮助。旧 `profile run` 仍可启动隔离子进程，但 `/manager` 扩展不会调用它。资源/包的 CLI 修改同样需要回到 `/manager` 发布，才能影响注册的预设；`pi-manager models` 直接写全局模型配置，只需 `/reload` 或重启 Pi。
 
 如果之前装过全局 `pi-manager`，它仅是可选维护命令，更新方式：
 
@@ -287,12 +334,13 @@ pi-manager install --yes
 | 变量 | 用途 |
 |---|---|
 | `PI_MANAGER_HOME` | 默认 `~/.pi-manager`，不可与默认 Pi 重叠；安装及启动 Pi 时使用相同值。 |
+| `PI_CODING_AGENT_DIR` | Pi agent 目录；Models 分类在其中读写 `models.json` 和 `settings.json`。默认 `~/.pi/agent`。 |
 | `PI_MANAGER_PI` | 安装器/旧 CLI 使用的 Pi 可执行文件，默认 `pi`。 |
 | `PI_MANAGER_SDK_PATH` | worker 使用的公共 Pi SDK 包目录/入口；默认自动检测。 |
 | `PI_MANAGER_SOURCE_AGENT_DIR` | 明确导入包时的可选来源 agent 目录；否则使用当前 Pi agent 或 `~/.pi/agent`。 |
-| `PI_MANAGER_EDITOR` | 仅供旧 CLI 外部编辑；Pi 内直接使用 Pi 编辑器。 |
+| `PI_MANAGER_EDITOR` | 供旧 CLI 和 `pi-manager models edit-json` 外部编辑；Pi 内直接使用 Pi 编辑器。 |
 
-管理器网络代理在 **More → Network proxy settings…** 或 `pi-manager config proxy` 中设置，与 Pi 自己的 `httpProxy`、模型请求相互独立。命令要求 agent 空闲，支持 Pi 交互 UI 或实现原生对话框的 RPC 客户端；print/JSON 模式不会打开管理器。打开、关闭管理器不调用模型。
+管理器网络代理在 **More → Network proxy settings…** 或 `pi-manager config proxy` 中设置，与 Pi 自己的 `httpProxy`、模型请求相互独立。Models 的 Test/Fetch 使用 Pi 进程的网络设置，不走这个管理器代理。命令要求 agent 空闲，支持 Pi 交互 UI 或实现原生对话框的 RPC 客户端；print/JSON 模式不会打开管理器。打开、关闭管理器不调用模型。
 
 ## 开发和测试
 
@@ -307,7 +355,7 @@ npm test
 
 `@earendil-works/pi-coding-agent`、`@earendil-works/pi-tui` 运行时由 Pi 提供，声明为可选 peer 和开发依赖，**不打包额外运行时副本**。分发包包含编译产物、两种 README 和版本说明。
 
-测试覆盖命令注册、无 UI/忙碌/重复打开防护、单页面板快捷键/搜索/选中项/缩放、发布状态比较、原生对话框/编辑器、只读包迁移和失败清理、启动快照上下文、独立发布和失败发布、版本摘要恢复、symlink 与资源过滤。真实 Pi 集成在临时 agent 目录安装，检查 `/manager` 及导出的 extension、模板和 Skill 加载，并确认返回同一会话、不调用模型。真实 npm 测试使用 loopback registry，无需模型 API key。
+测试覆盖命令注册、无 UI/忙碌/重复打开防护、单页面板快捷键/搜索/选中项/缩放、发布状态比较、原生对话框/编辑器、只读包迁移和失败清理、启动快照上下文、独立发布和失败发布、版本摘要恢复、symlink 与资源过滤，以及全局模型配置的校验/冲突/备份、模型发现和 Models 分类/CLI。真实 Pi 集成在临时 agent 目录安装，检查 `/manager` 及导出的 extension、模板和 Skill 加载，并确认返回同一会话、不调用模型。真实 npm 测试使用 loopback registry，无需模型 API key。
 
 ## 不做的功能
 

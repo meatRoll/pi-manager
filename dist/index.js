@@ -13,6 +13,7 @@ import { migratePiPackages } from './migration.js';
 import { selfUpdate } from './self-update.js';
 import { configReport, changePublishDir } from './config.js';
 import { changeProxy } from './proxy.js';
+import { runModelsCommand } from './model-cli.js';
 import { DEFAULT_SNAPSHOT_RETENTION, prunePublishedSnapshots } from './bundle.js';
 const HELP = `pi-manager ${VERSION} — Pi resource manager extension
 
@@ -54,6 +55,7 @@ Primary interface: type /manager INSIDE Pi. This CLI is optional/legacy.
   pi-manager config proxy                       Show proxy mode and effective proxy
   pi-manager config proxy none|system           Disable or inherit the system proxy
   pi-manager config proxy custom <url>          Save a custom HTTP(S)/SOCKS proxy
+  pi-manager models ...                          Manage global providers/models (see models --help)
   pi-manager prune [--keep N]                   Preview old publication snapshots to remove
   pi-manager prune [--keep N] --yes             Remove old snapshots, keeping the active and newest N-1
 
@@ -63,8 +65,8 @@ Types: skills, extensions, prompts, themes, context
 State: ${MANAGER_HOME}
 Environment: PI_MANAGER_HOME, PI_MANAGER_PUBLISH_DIR, PI_MANAGER_PI, PI_MANAGER_SDK_PATH, PI_MANAGER_EDITOR
 
-Changes apply next launch. No live unload or mutation of the default Pi/project config.
---yes acknowledges package code/install-script execution or destructive deletion.
+Changes apply next launch. Resource/package commands do not mutate the default Pi/project config; the models command explicitly writes Pi's global model config.
+--yes acknowledges package code/install-script execution, destructive deletion, or running a model auth command.
 `;
 const requireValue = (value, label) => { if (!value)
     throw new Error(`${label} is required. See --help.`); return value; };
@@ -129,6 +131,8 @@ export async function main(args) {
         acknowledge(args);
         return installPiExtension(true);
     }
+    if (command === 'models')
+        return runModelsCommand(args.slice(1));
     if (command === 'self-update') {
         acknowledge(args);
         const result = await selfUpdate();

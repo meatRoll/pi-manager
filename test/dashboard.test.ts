@@ -24,7 +24,7 @@ const fixture = (): DashboardModel => {
   ];
   return {
     profile: 'mine', loading: 'loaded: mine · next start: mine', publication: 'Unpublished changes · P publish for next start', pending: true,
-    rows: { all: extensions, extensions, skills: [{ id: 'resource:skill', label: '[x] skill', toggle: true }], context: [], packages: [{ id: 'package:npm:alpha', label: '[x] alpha', toggle: true }], more: [{ id: 'versions', label: 'Package generations / restore' }], prompts: [], themes: [] },
+    rows: { all: extensions, extensions, skills: [{ id: 'resource:skill', label: '[x] skill', toggle: true }], context: [], packages: [{ id: 'package:npm:alpha', label: '[x] alpha', toggle: true }], models: [], more: [{ id: 'versions', label: 'Package generations / restore' }], prompts: [], themes: [] },
   };
 };
 
@@ -186,4 +186,43 @@ test('RPC dashboard navigates tabs without a profile submenu and returns stable 
   assert.ok(titles[0].startsWith('pi-manager / mine / All'));
   assert.ok(titles[1].startsWith('pi-manager / mine / Extensions'));
   assert.equal(state.tab, 'extensions');
+});
+
+test('Models tab is global, hides publish, and routes model edit/add/refresh actions', async () => {
+  const model = fixture();
+  model.globalDetail = '1 provider · 1 model · default local/fast · changes apply after /reload or restart';
+  model.rows.models = [
+    { id: 'model:provider:local', label: 'Local relay', detail: 'openai-completions · 1 model', editable: true },
+    { id: 'model:entry:local/fast', label: '  Fast', detail: 'fast · 200K ctx · reasoning', editable: true },
+    { id: 'model:raw', label: 'Edit models.json (raw JSON)…' },
+  ];
+  const state = newDashboardState(); state.tab = 'models';
+  const h = host();
+  const result = dashboard(h.ctx, model, state);
+  const component = h.component(); component.focused = true;
+  const rendered = component.render(100).join('\n');
+  assert.match(rendered, /global/);
+  assert.match(rendered, /A add provider/);
+  assert.match(rendered, /changes apply after \/reload/);
+  assert.doesNotMatch(rendered, /Publish/);
+  component.handleInput!('e');
+  assert.deepEqual(await result, { kind: 'edit', id: 'model:provider:local' });
+
+  for (const [key, kind] of [['a', 'add'], ['r', 'refresh'], ['s', 'switch']] as const) {
+    const next = dashboard(h.ctx, model, { ...state, views: {} });
+    h.component().handleInput!(key);
+    assert.deepEqual(await next, { kind });
+  }
+
+  const titles: string[] = [];
+  const ctx = { mode: 'rpc', ui: { select: async (title: string, options: string[]) => {
+    titles.push(title);
+    return options.find(option => option.includes(titles.length === 1 ? 'Tab: All' : 'Switch preset'));
+  } } } as unknown as ExtensionCommandContext;
+  const rpcState = newDashboardState(); rpcState.tab = 'models';
+  assert.deepEqual(await dashboard(ctx, model, rpcState), { kind: 'switch' });
+  assert.match(titles[0], /Models — global/);
+  assert.match(titles[0], /models\.json is not part of presets/);
+  assert.match(titles[0], /changes apply after \/reload/);
+  assert.equal(titles[0].includes('Publish'), false);
 });

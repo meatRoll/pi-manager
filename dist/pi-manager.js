@@ -11,12 +11,17 @@ import { dashboard, newDashboardState } from './dashboard.js';
 import { createPublicationInspector } from './publication-status.js';
 import { errorCode, errorMessage } from './errors.js';
 import { displayProxy, proxySummary, setProxySettings } from './proxy.js';
+import { readModels, readSettings } from './model-config.js';
+import { addProviderFlow, buildModelRows, modelGlobalStatus, runModelAction } from './model-ui.js';
 export function initialProfile(profiles, defaultProfile, loaded, published) {
     return [defaultProfile, loaded, published, profiles[0]?.name].find(name => name && profiles.some(profile => profile.name === name)) || undefined;
 }
 export async function openManager(ctx, loaded) {
     let current;
+    let modelsDoc = await readModels();
+    let settingsDoc = await readSettings();
     const changed = () => { current = undefined; };
+    const refreshModelConfig = async () => { modelsDoc = await readModels(); settingsDoc = await readSettings(); };
     const notify = (message = 'Saved to staging. Press P to publish for next Pi start; the current session is unchanged.') => ctx.ui.notify(message, 'info');
     const guard = async (action) => {
         try {
@@ -116,6 +121,10 @@ export async function openManager(ctx, loaded) {
         }
     };
     const add = async (profile, tab) => {
+        if (tab === 'models') {
+            await addProviderFlow(ctx);
+            return;
+        }
         const kind = tab === 'all' || tab === 'more' ? await choose(ctx, 'Add to staging', ['extensions', 'skills', 'context', 'packages', 'prompts', 'themes'].map(value => ({ label: value, value }))) : tab;
         if (!kind)
             return;
@@ -287,10 +296,12 @@ export async function openManager(ctx, loaded) {
                 : status === 'unpublished' ? 'Unpublished changes · P publish for next start' : status === 'unknown' ? 'Publication status unknown · R refresh / P publish' : loaded?.id === published?.id ? 'Published · staging only; external local packages remain references' : 'Published · restart Pi to load; current session unchanged',
             pending: status === 'unknown' || status === 'checking' ? undefined : status === 'unpublished',
             busy: !current,
+            globalDetail: modelGlobalStatus(modelsDoc, settingsDoc),
             rows: {
                 all: resourceRows(), extensions: resourceRows('extensions'), skills: resourceRows('skills'),
                 context: resourceRows('context'), prompts: resourceRows('prompts'), themes: resourceRows('themes'),
                 packages: (current?.packages || []).map(pkg => ({ id: `package:${pkg.source}`, label: `[${pkg.enabled ? 'x' : ' '}] ${pkg.displayName}`, detail: pkg.version || 'local', toggle: true })),
+                models: buildModelRows(modelsDoc, settingsDoc),
                 more: moreEntries,
             },
         });
@@ -342,12 +353,28 @@ export async function openManager(ctx, loaded) {
                     changed();
                 }
             }
-            else if (action.kind === 'publish')
-                await publish(profile);
-            else if (action.kind === 'add')
-                await add(profile, state.tab);
-            else if (action.kind === 'refresh')
-                changed();
+            else if (action.kind === 'publish') {
+                if (state.tab !== 'models')
+                    await publish(profile);
+            }
+            else if (action.kind === 'add') {
+                if (state.tab === 'models') {
+                    await addProviderFlow(ctx);
+                    await refreshModelConfig();
+                }
+                else
+                    await add(profile, state.tab);
+            }
+            else if (action.kind === 'refresh') {
+                if (state.tab === 'models')
+                    await refreshModelConfig();
+                else
+                    changed();
+            }
+            else if (action.id.startsWith('model:')) {
+                await runModelAction(ctx, action.id, action.kind === 'edit' ? 'edit' : 'open');
+                await refreshModelConfig();
+            }
             else if (action.id.startsWith('resource:')) {
                 const resource = current.resources.find(resource => `resource:${resource.id}` === action.id);
                 if (!resource)

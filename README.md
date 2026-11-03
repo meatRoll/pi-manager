@@ -2,9 +2,9 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-**v1.5.0 — package downloads can use a managed proxy.** [Release notes](CHANGELOG.md) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
+**v1.7.0 — manage Pi's global providers, models, defaults, and enabledModels from one tab or CLI.** [Release notes](CHANGELOG.md) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
 
-A **Pi extension** for managing packages, skills, extensions, prompt templates, themes, and preset Markdown context **inside Pi**.
+A **Pi extension** for managing packages, skills, extensions, prompt templates, themes, preset Markdown context, and Pi's global model configuration **inside Pi**.
 
 ```text
 Start Pi → /manager → manage resources → return to the same conversation
@@ -130,7 +130,7 @@ pi-manager / mine                         [S switch preset]
 loaded: mine · next start: mine
 Unpublished changes · P publish for next start
 
-[All]  Extensions  Skills  Context  Packages  More
+[All]  Extensions  Skills  Context  Packages  Models  More
 
 [x] meatRoll/pi-inspect-image · src/index.ts   extensions · package · 1.0.0 · read-only
 [x] handoff.ts                             extensions · standalone · owned
@@ -146,6 +146,7 @@ The footer is contextual: it lists only the keys that currently do something. `E
 - **Space** toggles the selected resource/package directly in staging. **Enter** previews a resource, or opens package actions. **E** edits an owned copy; **Del** deletes an owned copy after confirmation. External/package originals stay read-only.
 - **←→** or **Tab / Shift+Tab** changes category on the same screen. **/** searches (Enter finishes searching; Enter again opens). Each category keeps its selection and search after preview, editing, or toggling. **Esc** clears search first, then closes. Preview supports `↑↓` and `PgUp` / `PgDn`.
 - **A** adds to the current category; **P** publishes only after confirmation. **R** refreshes metadata after edits from another process. The terminal panel opens immediately; resource discovery and the full byte comparison run in the background. Rows become usable before that comparison finishes, and the header says **Checking publication…** until a result is known. It then marks unpublished changes or an unknown comparison instead of claiming the live session changed. Closing or switching cancels the read-only work. External local packages are references, not tracked historical copies.
+- **Models** edits Pi's **global** model configuration, not the staging preset. It has its own footer (`A add provider · R reload file`), does not publish, and applies only after `/reload` or a restart. See [Models and providers](#models-and-providers-global-not-published).
 - **More** groups prompt templates, themes, preset management/default selection, package import, update-all, restore, logs, network proxy, copy/delete, manager-only publication, and help.
 - RPC clients receive the same flat resource list with explicit category/action dialogs; terminal-only shortcuts are not required. The first list waits only for resource metadata, not the full byte comparison. Because RPC cannot patch an open dialog, a completed check appears in the next dialog.
 - Package extensions display as `package-label · src/index.ts`, so identical entry filenames are distinguishable. Git labels follow the **configured repository** (for example `meatRoll/pi-image-gen`), not a possibly inherited upstream manifest name; non-GitHub hosts stay visible. npm labels use the configured package name, including its scope. Local packages with their own Git checkout use its `origin` repository (read locally, with no network access); otherwise they use the manifest name or configured path. Parent repositories and inherited manifest repository URLs are not used. Package lists use the same labels; raw manifest names remain available in package details. Standalone filenames are unchanged. These are display labels only, not renamed files, sources, or resource IDs.
@@ -154,6 +155,60 @@ The footer is contextual: it lists only the keys that currently do something. `E
 - User-level resources that Pi discovers on its own (for example `~/.agents/skills`) appear as `user-level · read-only`. They cannot be toggled or edited from a preset, and publication never exports them: Pi loads them in every session, so the snapshot stays self-contained.
 - Package sources accept `npm:name@version`, `git:github.com/owner/repo@ref`, and local paths. Local packages remain external references: no dependency installation, copying, or deletion of their original directories.
 - Package operations and deletion ask for confirmation. Installation scripts have your user permissions.
+
+### Models and providers (global, not published)
+
+The **Models** tab edits Pi's global model configuration, not the staging preset:
+`~/.pi/agent/models.json` (or `$PI_CODING_AGENT_DIR/models.json`) and
+`~/.pi/agent/settings.json`. It is never copied into a publication and does not
+change the current session. Use **`/reload` or restart Pi** to apply changes.
+
+- Structured editors cover provider fields (`name`, `baseUrl`, `api`, headers,
+  compatibility, OAuth, `authHeader`), models, and `modelOverrides`; an advanced
+  JSON editor is available for the whole file, one provider/model, or one
+  override. Unknown fields are preserved.
+- API keys may be literal, `$ENV_VAR`, or `!command`. A command is executed
+  locally when Pi resolves the key; the editor warns before accepting one.
+- **Defaults** edits `defaultProvider`, `defaultModel`, and
+  `defaultThinkingLevel` for new sessions. **Enabled models** edits
+  `enabledModels`, which controls startup selection and model cycling;
+  `/model` still lists every available model.
+- **Test endpoint…** only sends `GET {baseUrl}/models` (Anthropic-compatible
+  providers use `/v1/models` when the base URL has no `/v1`; you can also enter a
+  custom URL) and reports the returned models. It does not send a chat completion.
+- **Fetch models from endpoint…** fetches the same list, then asks which models
+  to add. Nothing is selected by default; `A` selects all new models; already
+  configured models are shown disabled. Discovery fills known metadata and
+  falls back to `contextWindow` 128000, `maxTokens` 16384, input `text`,
+  reasoning `false`, and zero cost.
+- Pi-style `//` comments and trailing commas are accepted when reading;
+  structured saves write normalized JSON (the original raw file is in the
+  backup). Writes are atomic, mode 0600, with a timestamped backup under
+  `~/.pi-manager/backups/agent` (10 kept). If another process changed the file
+  after the editor opened, the save fails with a reload prompt and does not
+  overwrite it. Symlinked config files are refused.
+- Network actions happen only when you choose them. OAuth providers cannot be
+  auto-discovered; add models manually or use the provider's login flow.
+  `auth.json` and `models-store.json` are not modified.
+
+The same operations are available from the CLI:
+
+```bash
+pi-manager models
+pi-manager models list [--json] [--reveal]
+pi-manager models provider add local --base-url https://example.com/v1 \
+  --api openai-completions --api-key-env LOCAL_KEY
+pi-manager models add local --id fast --context-window 200000 --max-tokens 32000 \
+  --input text,image --reasoning
+pi-manager models default local fast --thinking high
+pi-manager models enabled add 'local/*'
+pi-manager models provider test local
+pi-manager models provider fetch local --add new --yes
+```
+
+`--reveal` prints literal keys; `provider test/fetch` with `!command` auth
+requires `--yes`. Use `pi-manager models --help` for update, remove, override,
+and `edit-json` flags.
 
 ### Save, publish, restart
 
@@ -235,6 +290,7 @@ Whole-package disable sets all four resource filters to `[]` and preserves the p
 ```text
 ~/.pi-manager/
 ├── state.json
+├── backups/agent/                  Timestamped models.json/settings.json backups
 ├── profiles/<name>/
 │   ├── settings.json              Staging Pi package declarations and filters
 │   ├── manager.json               Context/resource metadata
@@ -246,9 +302,9 @@ Whole-package disable sets all four resource filters to `[]` and preserves the p
     └── .snapshots/<id>/           Detached package/resource files and context
 ```
 
-**Installation is the explicit exception to “do not change default Pi settings”:** the official `pi install` adds the local manager package declaration. After registration, manager actions write to their own data directory, not repeatedly to default Pi settings.
+**Installation and the Models tab are explicit exceptions to “do not change default Pi settings”:** the official `pi install` adds the local manager package declaration, and publishing applies package declarations. The Models tab separately writes `~/.pi/agent/models.json` and `settings.json` (or `$PI_CODING_AGENT_DIR`) with atomic replacement, backups under `~/.pi-manager/backups/agent`, and revision conflict checks. Other manager actions write to their own data directory.
 
-The extension does not automatically import default Pi resources. Explicit package import is read-only on the source. It does not edit external originals, rewrite project `.pi` files, copy credentials, change the parent shell environment, or modify Pi's source/install directory. npm/Git caches and third-party scripts can still have external side effects.
+The extension does not automatically import default Pi resources. Explicit package import is read-only on the source. It does not edit external originals, rewrite project `.pi` files, copy credentials, modify `auth.json`/`models-store.json`, change the parent shell environment, or modify Pi's source/install directory. npm/Git caches and third-party scripts can still have external side effects.
 
 The current Pi continues to use its normal authentication and sessions. Old CLI-created isolated profile credentials/sessions are not adopted or shared by the in-Pi extension. Profile mutation locks still apply when a legacy manager-launched Pi uses that staging directory; externally launched processes cannot be detected reliably.
 
@@ -280,7 +336,7 @@ node dist/index.js package versions review
 node dist/index.js package rollback review --yes
 ```
 
-The old standalone UI is explicitly `node dist/index.js tui`. Running the CLI without arguments prints help rather than launching a separate TUI. Legacy `profile run` still launches an isolated Pi child; the `/manager` extension never uses it. CLI changes also need publication from `/manager` before they affect the registered preset.
+The old standalone UI is explicitly `node dist/index.js tui`. Running the CLI without arguments prints help rather than launching a separate TUI. Legacy `profile run` still launches an isolated Pi child; the `/manager` extension never uses it. Resource/package CLI changes also need publication from `/manager` before they affect the registered preset; `pi-manager models` writes the global model config directly and needs only `/reload` or a restart.
 
 If you previously installed a global `pi-manager` command, it is optional. To update that maintenance command after building:
 
@@ -295,12 +351,13 @@ pi-manager install --yes
 | Variable | Purpose |
 |---|---|
 | `PI_MANAGER_HOME` | Manager data; default `~/.pi-manager`, must not overlap default Pi. Use the same value during install and Pi startup. |
+| `PI_CODING_AGENT_DIR` | Pi's agent directory; the Models tab reads and writes `models.json` and `settings.json` there. Default `~/.pi/agent`. |
 | `PI_MANAGER_PI` | Pi executable used by installer/legacy CLI; default `pi`. |
 | `PI_MANAGER_SDK_PATH` | Public installed Pi SDK package/entry for worker operations; otherwise detected automatically. |
 | `PI_MANAGER_SOURCE_AGENT_DIR` | Optional source agent directory for explicit package import; otherwise the current Pi agent or `~/.pi/agent`. |
-| `PI_MANAGER_EDITOR` | External editor for the legacy CLI only. In-Pi editing uses Pi's editor. |
+| `PI_MANAGER_EDITOR` | External editor for the legacy CLI and `pi-manager models edit-json`. In-Pi editing uses Pi's editor. |
 
-Manager network proxy is configured from **More → Network proxy settings…** or `pi-manager config proxy`; it is separate from Pi's `httpProxy` and model-provider traffic. The command requires an idle session and interactive Pi UI; an RPC client supporting native dialogs also works. Print/JSON mode does not open the manager. Opening or closing it makes no model call.
+Manager network proxy is configured from **More → Network proxy settings…** or `pi-manager config proxy`; it is separate from Pi's `httpProxy` and model-provider traffic. Model endpoint Test/Fetch uses the Pi process's network settings, not this proxy mode. The command requires an idle session and interactive Pi UI; an RPC client supporting native dialogs also works. Print/JSON mode does not open the manager. Opening or closing it makes no model call.
 
 ## Development and tests
 
@@ -315,7 +372,7 @@ npm test
 
 Pi supplies `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui` at runtime. They are optional peers and development-only dependencies, **not bundled runtime copies**. Distribution archives include compiled files, both READMEs, and the changelog.
 
-Tests cover command registration, non-UI/busy/reentrant guards, flat dashboard shortcuts/search/selection/resize, publication-status comparisons, native dialog/editor flows, read-only package migration and failure cleanup, snapshot context binding, detached publication, failed publications, package digests/recovery, symlink protection, and resource filters. Real Pi integration installs into a temporary agent directory and checks that `/manager`, exported extensions, prompts, and skills load and the command returns to the same session without a model call. npm lifecycle tests use an in-process loopback registry. No model API key is needed.
+Tests cover command registration, non-UI/busy/reentrant guards, flat dashboard shortcuts/search/selection/resize, publication-status comparisons, native dialog/editor flows, read-only package migration and failure cleanup, snapshot context binding, detached publication, failed publications, package digests/recovery, symlink protection, resource filters, global model config validation/conflicts/backups, model discovery, and the Models tab and CLI. Real Pi integration installs into a temporary agent directory and checks that `/manager`, exported extensions, prompts, and skills load and the command returns to the same session without a model call. npm lifecycle tests use an in-process loopback registry. No model API key is needed.
 
 ## Out of scope
 

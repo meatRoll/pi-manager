@@ -3,13 +3,14 @@ import { Input, SelectList, Key, matchesKey, truncateToWidth, visibleWidth, wrap
 import { choose } from './pi-ui.js';
 import { plain } from './terminal.js';
 
-export type DashboardTab = 'all' | 'extensions' | 'skills' | 'context' | 'packages' | 'more' | 'prompts' | 'themes';
+export type DashboardTab = 'all' | 'extensions' | 'skills' | 'context' | 'packages' | 'models' | 'more' | 'prompts' | 'themes';
 const tabs: { id: DashboardTab; label: string; short: string }[] = [
   { id: 'all', label: 'All', short: 'All' },
   { id: 'extensions', label: 'Extensions', short: 'Ext' },
   { id: 'skills', label: 'Skills', short: 'Skills' },
   { id: 'context', label: 'Context', short: 'Ctx' },
   { id: 'packages', label: 'Packages', short: 'Pkgs' },
+  { id: 'models', label: 'Models', short: 'Models' },
   { id: 'more', label: 'More', short: 'More' },
 ];
 const extraTabs = [
@@ -31,6 +32,8 @@ export interface DashboardModel {
   pending: boolean | undefined;
   busy?: boolean;
   error?: string;
+  /** Models is a global agent setting, not part of the staging profile. */
+  globalDetail?: string;
   rows: Record<DashboardTab, DashboardEntry[]>;
 }
 export type DashboardLoader = (update: (model: DashboardModel) => void, signal: AbortSignal) => Promise<void>;
@@ -69,12 +72,16 @@ export async function dashboard(ctx: ExtensionCommandContext, model: DashboardMo
     }).catch(() => {});
     while (true) {
       const action = await choose<DashboardAction | { tab: DashboardTab }>(ctx,
-        `pi-manager / ${model.profile} / ${tabLabel(state.tab)} — staging\n${model.loading}\n${model.publication}`, [
+        state.tab === 'models'
+          ? `pi-manager / ${model.profile} / ${tabLabel(state.tab)} — global\nmodels.json is not part of presets\n${model.globalDetail || ''}`
+          : `pi-manager / ${model.profile} / ${tabLabel(state.tab)} — staging\n${model.loading}\n${model.publication}`, [
           ...[...tabs, ...extraTabs].filter(tab => tab.id !== state.tab).map(tab => ({ label: `Tab: ${tab.label}`, value: { tab: tab.id } })),
           { label: 'Switch preset', value: { kind: 'switch' } },
-          { label: '+ Add resource / package', value: { kind: 'add' } },
-          { label: 'Publish for next Pi start', value: { kind: 'publish' } },
-          { label: 'Refresh staging metadata', value: { kind: 'refresh' } },
+          state.tab === 'models'
+            ? { label: '+ Add provider', value: { kind: 'add' } }
+            : { label: '+ Add resource / package', value: { kind: 'add' } },
+          ...(state.tab === 'models' ? [] : [{ label: 'Publish for next Pi start', value: { kind: 'publish' as const } }]),
+          { label: state.tab === 'models' ? 'Refresh model config' : 'Refresh staging metadata', value: { kind: 'refresh' } },
           ...model.rows[state.tab].map(row => ({ label: `${row.label}${row.detail ? ` · ${row.detail}` : ''}`, value: { kind: 'open' as const, id: row.id } })),
         ]);
       if (action && 'tab' in action) { state.tab = action.tab; continue; }
@@ -123,15 +130,21 @@ export async function dashboard(ctx: ExtensionCommandContext, model: DashboardMo
     const hintLines = (row: DashboardEntry | undefined, width: number) => {
       const line = (items: string[]) => items.filter(Boolean).join(' · ');
       const compact = width < 50;
-      const panel = model.busy || model.error ? [] : ['A add', 'P publish'];
-      const rowKeys = !row ? [] : state.tab === 'packages'
-        ? [row.toggle ? 'Space toggle package' : '', 'Enter package menu']
-        : state.tab === 'more'
-          ? ['Enter run action']
-          : [row.toggle ? 'Space toggle' : '', compact ? 'Enter actions' : 'Enter preview / actions', row.editable ? 'E edit' : '', row.deletable ? 'Del delete' : ''];
+      const panel = state.tab === 'models'
+        ? ['A add provider', 'R reload file']
+        : model.busy || model.error ? [] : ['A add', 'P publish'];
+      const rowKeys = !row ? [] : state.tab === 'models'
+        ? ['Enter open', row.editable ? 'E edit' : '']
+        : state.tab === 'packages'
+          ? [row.toggle ? 'Space toggle package' : '', 'Enter package menu']
+          : state.tab === 'more'
+            ? ['Enter run action']
+            : [row.toggle ? 'Space toggle' : '', compact ? 'Enter actions' : 'Enter preview / actions', row.editable ? 'E edit' : '', row.deletable ? 'Del delete' : ''];
       const lines = compact
         ? [[`[${tabLabel(state.tab)}]`, '←→ Tab', '↑↓ select'], rowKeys, [...panel, 'S preset', '/ search', 'Esc']]
-        : [['↑↓ select', '←→ / Tab category', ...rowKeys], [...panel, 'S switch preset', 'R refresh', '/ search', 'Esc close']];
+        : state.tab === 'models'
+          ? [['↑↓ select', '←→ / Tab category', ...rowKeys], [...panel, 'S preset', '/ search', 'Esc close']]
+          : [['↑↓ select', '←→ / Tab category', ...rowKeys], [...panel, 'S switch preset', 'R refresh', '/ search', 'Esc close']];
       return lines.map(line).filter(Boolean).flatMap(text => wrapTextWithAnsi(text, width));
     };
     const renderTabs = (width: number) => {
@@ -163,8 +176,10 @@ export async function dashboard(ctx: ExtensionCommandContext, model: DashboardMo
         width = Math.max(1, width);
         const rowForHints = selected();
         const hints = hintLines(rowForHints, width);
-        const header = [theme.fg('accent', `pi-manager / ${model.profile}    [S switch preset]`),
-          theme.fg('muted', lineText(model.loading)), theme.fg(model.pending ? 'warning' : 'muted', lineText(model.publication)),
+        const header = [theme.fg('accent', `pi-manager / ${model.profile}${state.tab === 'models' ? ' (global)' : '    [S switch preset]'}`),
+          ...(state.tab === 'models'
+            ? [theme.fg('muted', lineText(model.globalDetail || 'global model configuration'))]
+            : [theme.fg('muted', lineText(model.loading)), theme.fg(model.pending ? 'warning' : 'muted', lineText(model.publication))]),
           renderTabs(width),
           ...(searching ? input.render(width) : [theme.fg('dim', `Search: ${lineText(currentView().query) || '( / to search )'}`)]), ''];
         // Leave room for Pi's editor/footer and the SelectList scroll indicator.
@@ -175,6 +190,7 @@ export async function dashboard(ctx: ExtensionCommandContext, model: DashboardMo
           : model.busy ? 'Reading resource metadata… You can change category, search, or press Esc.'
           : currentView().query ? 'No matching entries. Esc clears search.'
           : state.tab === 'packages' ? 'No packages. Press A to add one.'
+          : state.tab === 'models' ? 'No providers. Press A to add one.'
           : state.tab === 'more' ? 'No actions.' : 'No entries. Press A to add a resource.';
         return [...header, ...(filtered.length ? list.render(width) : [theme.fg(model.error ? 'warning' : 'dim', empty)]), '',
           theme.fg('muted', row ? `${lineText(row.label)}${row.detail ? ` · ${lineText(row.detail)}` : ''}` : ''),
@@ -197,8 +213,8 @@ export async function dashboard(ctx: ExtensionCommandContext, model: DashboardMo
         else if (matchesKey(data, Key.right) || matchesKey(data, Key.tab)) changeTab(1);
         else if (matchesKey(data, Key.left) || matchesKey(data, Key.shift(Key.tab))) changeTab(-1);
         else if (matchesKey(data, Key.slash)) { searching = true; input.focused = focused; }
-        else if (!model.busy && !model.error && (matchesKey(data, 'a') || matchesKey(data, Key.shift('a')))) finish({ kind: 'add' });
-        else if (!model.busy && !model.error && (matchesKey(data, 'p') || matchesKey(data, Key.shift('p')))) finish({ kind: 'publish' });
+        else if ((state.tab === 'models' || (!model.busy && !model.error)) && (matchesKey(data, 'a') || matchesKey(data, Key.shift('a')))) finish({ kind: 'add' });
+        else if (state.tab !== 'models' && !model.busy && !model.error && (matchesKey(data, 'p') || matchesKey(data, Key.shift('p')))) finish({ kind: 'publish' });
         else if (matchesKey(data, 's') || matchesKey(data, Key.shift('s'))) finish({ kind: 'switch' });
         else if (matchesKey(data, 'r') || matchesKey(data, Key.shift('r'))) finish({ kind: 'refresh' });
         else {

@@ -1,5 +1,44 @@
 # Changelog
 
+## v1.7.0 — Pi model configuration is managed from one place
+
+The new **Models** tab and `pi-manager models` CLI edit Pi's global
+`models.json` and the model-related keys in `settings.json`. This is agent
+configuration, not a staging preset: it is never published, and changes do not
+alter the current session.
+
+### Features
+
+- Manage providers, models, and `modelOverrides` with structured forms or
+  advanced JSON. Provider keys can be literal, `$ENV_VAR`, or `!command`; the
+  command form explicitly warns that it runs locally. Unknown JSON fields are
+  preserved.
+- Edit `defaultProvider` / `defaultModel` / `defaultThinkingLevel` for new
+  sessions, and `enabledModels` for startup selection and model cycling.
+  `/model` availability is unchanged.
+- **Test endpoint…** sends only `GET {baseUrl}/models` and reports the response.
+  **Fetch models from endpoint…** then asks which returned models to add:
+  nothing is selected by default, `A` selects all new models, and configured
+  models are disabled. Discovery fills known metadata and uses 128000 context,
+  16384 output tokens, text-only input, no reasoning, and zero cost when values
+  are missing.
+- `pi-manager models list|show|validate|edit-json|default|enabled` plus
+  `provider add|update|remove|test|fetch`, model `add|update|remove`, and
+  `override set|remove`. `--json` and `--reveal` are available for inspection;
+  destructive commands require `--yes`.
+
+### Safety
+
+- Pi-style `//` comments and trailing commas are accepted when reading; structured
+  saves write normalized JSON and keep the original raw file in the backup.
+- Atomic 0600 writes through a temporary file, timestamped backups under
+  `~/.pi-manager/backups/agent` (10 kept), and SHA-256 revision checks that fail
+  instead of overwriting a file changed outside the manager. Symlinked config
+  files are refused.
+- No automatic network request, model call, `/reload`, or session-model switch.
+  OAuth providers are not auto-discovered; manual model entries remain
+  available. `auth.json` and `models-store.json` are untouched.
+
 ## v1.6.0 — Publications declare packages instead of copying them
 
 A snapshot used to flatten every package resource into a copied file path, which
@@ -166,6 +205,28 @@ The first stable release of **pi-manager**, a resource manager that runs inside 
 - 82 automated tests covering the dashboard, cancellation, migration, source-aware labels, publication, package recovery, isolation, and real Pi integration without model calls.
 
 ## 简体中文
+
+### v1.7.0 — 统一管理 Pi 模型配置
+
+新增 **Models** 分类和 `pi-manager models` CLI，直接管理 Pi 全局的
+`models.json`，以及 `settings.json` 中的模型相关键。它属于 agent 配置，不属于暂存
+预设，不会发布，也不会改变当前会话。
+
+- 用结构化表单或高级 JSON 管理供应商、模型和 `modelOverrides`。API key 支持
+  literal、`$ENV_VAR`、`!command`；命令形式会明确提示将在本机执行。未知 JSON 字段保留。
+- 编辑新会话的 `defaultProvider` / `defaultModel` / `defaultThinkingLevel`，以及控制启动
+  选择和模型循环的 `enabledModels`；不改变 `/model` 的可用列表。
+- **Test endpoint…** 只发送 `GET {baseUrl}/models`；**Fetch models from endpoint…**
+  拉取后让你勾选要添加的模型，默认不选，`A` 全选新模型，已配置模型禁用。缺失元数据回退为
+  128000 context、16384 maxTokens、纯文本输入、无 reasoning、cost 全 0。
+- `pi-manager models list|show|validate|edit-json|default|enabled`，以及
+  `provider add|update|remove|test|fetch`、模型 `add|update|remove` 和
+  `override set|remove`。支持 `--json`、`--reveal`；破坏性操作需要 `--yes`。
+- 读取支持 Pi 风格的 `//` 注释和尾随逗号；结构化保存写规范 JSON，原始文件保留在备份中。
+- 原子写入（0600）、`~/.pi-manager/backups/agent` 时间戳备份（保留 10 份）和 SHA-256
+  版本校验；文件被外部修改时直接失败而不是覆盖，symlink 配置会被拒绝。
+- 不自动联网、不发送对话请求、不自动 `/reload`、不切换当前会话模型；OAuth 供应商不支持
+  自动发现；不修改 `auth.json` 和 `models-store.json`。
 
 ### v1.5.0 — 包下载可走受管代理
 

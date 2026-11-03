@@ -55,6 +55,152 @@ export async function choose(ctx, title, choices) {
         };
     });
 }
+const lineText = (text) => plain(text).replace(/[\r\n\t]/g, ' ');
+/** Multi-select companion to choose(). TUI uses Space/A/N; RPC falls back to
+ * an explicit add-all / numbered-selection dialog because select() is single-value.
+ */
+export async function checklist(ctx, title, items, hint = '') {
+    const chosen = (indexes) => [...new Set([...indexes].filter(index => !items[index]?.disabled))].map(index => items[index].value);
+    if (ctx.mode !== 'tui') {
+        const fresh = items.map((item, index) => ({ item, index })).filter(entry => !entry.item.disabled);
+        if (!fresh.length) {
+            ctx.ui.notify('No new entries to select.', 'info');
+            return [];
+        }
+        const action = await ctx.ui.select(plain(title), [`Add all new (${fresh.length})`, 'Choose by number…', 'Cancel']);
+        if (action?.startsWith('Add all new'))
+            return chosen(fresh.map(entry => entry.index));
+        if (action !== 'Choose by number…')
+            return undefined;
+        await view(ctx, title, items.map((item, index) => `${index + 1}. ${item.disabled ? '(configured) ' : ''}${item.label}${item.detail ? ` · ${item.detail}` : ''}`).join('\n'));
+        const input = await ctx.ui.input('Models to add', '1,3,5-8 — blank adds none');
+        if (input === undefined)
+            return undefined;
+        const text = input.trim();
+        if (!text)
+            return [];
+        const indexes = [];
+        for (const part of text.split(/[,\s]+/).filter(Boolean)) {
+            const range = /^(\d+)-(\d+)$/.exec(part);
+            if (range) {
+                const start = Number(range[1]), end = Number(range[2]);
+                for (let index = Math.min(start, end); index <= Math.max(start, end); index += 1)
+                    if (index >= 1 && index <= items.length)
+                        indexes.push(index - 1);
+            }
+            else if (/^\d+$/.test(part)) {
+                const index = Number(part);
+                if (index >= 1 && index <= items.length)
+                    indexes.push(index - 1);
+            }
+        }
+        return chosen(indexes);
+    }
+    return ctx.ui.custom((tui, theme, _keys, done) => {
+        let searching = false, focused = false, finished = false;
+        let height = 8, listHeight = 0, list;
+        let query = '';
+        const selected = new Set(items.map((item, index) => item.selected && !item.disabled ? index : -1).filter(index => index >= 0));
+        const input = new Input();
+        const filtered = () => items.map((item, index) => ({ item, index }))
+            .filter(entry => plain(`${entry.item.label} ${entry.item.detail || ''}`).toLowerCase().includes(query.toLowerCase()));
+        const finish = (result) => { if (!finished) {
+            finished = true;
+            done(result);
+        } };
+        const rebuild = () => {
+            const visible = filtered();
+            list = new SelectList(visible.map(entry => ({
+                value: String(entry.index),
+                label: entry.item.disabled ? `    ${lineText(entry.item.label)}` : `${selected.has(entry.index) ? '[x]' : '[ ]'} ${lineText(entry.item.label)}`,
+                description: entry.item.detail ? lineText(entry.item.detail) : undefined,
+            })), height, {
+                selectedPrefix: text => theme.fg('accent', text), selectedText: text => theme.fg('accent', text),
+                description: text => theme.fg('muted', text), scrollInfo: text => theme.fg('dim', text), noMatch: text => theme.fg('warning', text),
+            }, { minPrimaryColumnWidth: 24, maxPrimaryColumnWidth: 88 });
+            list.onSelect = () => finish(chosen(selected));
+            list.onCancel = () => finish(undefined);
+            listHeight = height;
+        };
+        const move = (offset) => {
+            const visible = filtered();
+            const current = visible.findIndex(entry => String(entry.index) === list.getSelectedItem()?.value);
+            list.setSelectedIndex(Math.max(0, Math.min(visible.length - 1, current + offset)));
+        };
+        input.setValue(query);
+        input.onSubmit = () => { searching = false; input.focused = false; };
+        rebuild();
+        return {
+            get focused() { return focused; },
+            set focused(value) { focused = value; input.focused = focused && searching; },
+            render(width) {
+                width = Math.max(1, width);
+                height = Math.max(1, Math.min(14, (process.stdout.rows || 24) - 10));
+                if (height !== listHeight)
+                    rebuild();
+                const count = selected.size;
+                return [truncateToWidth(theme.fg('accent', plain(title)), width), '',
+                    ...(searching ? input.render(width) : [truncateToWidth(theme.fg('muted', `Selected: ${count} · Search: ${query || '( / to search )'}`), width)]), '',
+                    ...list.render(width).map(line => truncateToWidth(line, width)), '',
+                    truncateToWidth(theme.fg('dim', `${hint ? `${hint} · ` : ''}↑↓ move · Space toggle · A all · N none · / search · Enter confirm · Esc cancel`), width)];
+            },
+            invalidate() { list.invalidate(); input.invalidate(); },
+            handleInput(data) {
+                if (finished)
+                    return;
+                const up = matchesKey(data, Key.up), down = matchesKey(data, Key.down), pageUp = matchesKey(data, Key.pageUp), pageDown = matchesKey(data, Key.pageDown);
+                if (matchesKey(data, Key.escape)) {
+                    if (searching || query) {
+                        searching = false;
+                        input.focused = false;
+                        input.setValue('');
+                        query = '';
+                        rebuild();
+                    }
+                    else
+                        finish(undefined);
+                }
+                else if (searching && matchesKey(data, Key.enter)) {
+                    searching = false;
+                    input.focused = false;
+                }
+                else if (searching && !up && !down && !pageUp && !pageDown) {
+                    input.handleInput(data);
+                    query = input.getValue();
+                    rebuild();
+                }
+                else if (up || down || pageUp || pageDown)
+                    move(up ? -1 : down ? 1 : pageUp ? -height : height);
+                else if (matchesKey(data, Key.slash)) {
+                    searching = true;
+                    input.focused = focused;
+                }
+                else if (matchesKey(data, Key.space)) {
+                    const index = Number(list.getSelectedItem()?.value);
+                    if (Number.isInteger(index) && !items[index].disabled) {
+                        if (selected.has(index))
+                            selected.delete(index);
+                        else
+                            selected.add(index);
+                        rebuild();
+                    }
+                }
+                else if (matchesKey(data, 'a') || matchesKey(data, Key.shift('a'))) {
+                    items.forEach((item, index) => { if (!item.disabled)
+                        selected.add(index); });
+                    rebuild();
+                }
+                else if (matchesKey(data, 'n') || matchesKey(data, Key.shift('n'))) {
+                    selected.clear();
+                    rebuild();
+                }
+                else
+                    list.handleInput(data);
+                tui.requestRender();
+            },
+        };
+    });
+}
 export async function view(ctx, title, content) {
     if (ctx.mode !== 'tui') {
         await ctx.ui.select(`${plain(title)}\n${plain(content).slice(0, 16000)}`, ['Back']);
