@@ -76,7 +76,7 @@ export async function dashboard(ctx: ExtensionCommandContext, model: DashboardMo
           ? `pi-manager / ${model.profile} / ${tabLabel(state.tab)} — global\nmodels.json is not part of presets\n${model.globalDetail || ''}`
           : `pi-manager / ${model.profile} / ${tabLabel(state.tab)} — staging\n${model.loading}\n${model.publication}`, [
           ...[...tabs, ...extraTabs].filter(tab => tab.id !== state.tab).map(tab => ({ label: `Tab: ${tab.label}`, value: { tab: tab.id } })),
-          { label: 'Switch preset', value: { kind: 'switch' } },
+          ...(state.tab === 'models' ? [] : [{ label: 'Switch preset', value: { kind: 'switch' as const } }]),
           state.tab === 'models'
             ? { label: '+ Add provider', value: { kind: 'add' } }
             : { label: '+ Add resource / package', value: { kind: 'add' } },
@@ -130,6 +130,7 @@ export async function dashboard(ctx: ExtensionCommandContext, model: DashboardMo
     const hintLines = (row: DashboardEntry | undefined, width: number) => {
       const line = (items: string[]) => items.filter(Boolean).join(' · ');
       const compact = width < 50;
+      const presetKey = state.tab === 'models' ? [] : ['S preset'];
       const panel = state.tab === 'models'
         ? ['A add provider', 'R reload file']
         : model.busy || model.error ? [] : ['A add', 'P publish'];
@@ -141,9 +142,9 @@ export async function dashboard(ctx: ExtensionCommandContext, model: DashboardMo
             ? ['Enter run action']
             : [row.toggle ? 'Space toggle' : '', compact ? 'Enter actions' : 'Enter preview / actions', row.editable ? 'E edit' : '', row.deletable ? 'Del delete' : ''];
       const lines = compact
-        ? [[`[${tabLabel(state.tab)}]`, '←→ Tab', '↑↓ select'], rowKeys, [...panel, 'S preset', '/ search', 'Esc']]
+        ? [[`[${tabLabel(state.tab)}]`, '←→ Tab', '↑↓ select'], rowKeys, [...panel, ...presetKey, '/ search', 'Esc']]
         : state.tab === 'models'
-          ? [['↑↓ select', '←→ / Tab category', ...rowKeys], [...panel, 'S preset', '/ search', 'Esc close']]
+          ? [['↑↓ select', '←→ / Tab category', ...rowKeys], [...panel, '/ search', 'Esc close']]
           : [['↑↓ select', '←→ / Tab category', ...rowKeys], [...panel, 'S switch preset', 'R refresh', '/ search', 'Esc close']];
       return lines.map(line).filter(Boolean).flatMap(text => wrapTextWithAnsi(text, width));
     };
@@ -215,7 +216,7 @@ export async function dashboard(ctx: ExtensionCommandContext, model: DashboardMo
         else if (matchesKey(data, Key.slash)) { searching = true; input.focused = focused; }
         else if ((state.tab === 'models' || (!model.busy && !model.error)) && (matchesKey(data, 'a') || matchesKey(data, Key.shift('a')))) finish({ kind: 'add' });
         else if (state.tab !== 'models' && !model.busy && !model.error && (matchesKey(data, 'p') || matchesKey(data, Key.shift('p')))) finish({ kind: 'publish' });
-        else if (matchesKey(data, 's') || matchesKey(data, Key.shift('s'))) finish({ kind: 'switch' });
+        else if (state.tab !== 'models' && (matchesKey(data, 's') || matchesKey(data, Key.shift('s')))) finish({ kind: 'switch' });
         else if (matchesKey(data, 'r') || matchesKey(data, Key.shift('r'))) finish({ kind: 'refresh' });
         else {
           const row = selected();

@@ -205,18 +205,25 @@ test('Models tab is global, hides publish, and routes model edit/add/refresh act
   assert.match(rendered, /A add provider/);
   assert.match(rendered, /changes apply after \/reload/);
   assert.doesNotMatch(rendered, /Publish/);
+  assert.doesNotMatch(rendered, /S preset/);
+  assert.doesNotMatch(rendered, /Switch preset/);
   component.handleInput!('e');
   assert.deepEqual(await result, { kind: 'edit', id: 'model:provider:local' });
 
-  for (const [key, kind] of [['a', 'add'], ['r', 'refresh'], ['s', 'switch']] as const) {
+  const ignored = dashboard(h.ctx, model, { ...state, views: {} });
+  h.component().handleInput!('s');
+  h.component().handleInput!('\x1b');
+  assert.equal(await ignored, undefined);
+
+  for (const [key, kind] of [['a', 'add'], ['r', 'refresh']] as const) {
     const next = dashboard(h.ctx, model, { ...state, views: {} });
     h.component().handleInput!(key);
     assert.deepEqual(await next, { kind });
   }
 
-  const titles: string[] = [];
+  const titles: string[] = [], optionsSeen: string[][] = [];
   const ctx = { mode: 'rpc', ui: { select: async (title: string, options: string[]) => {
-    titles.push(title);
+    titles.push(title); optionsSeen.push(options);
     return options.find(option => option.includes(titles.length === 1 ? 'Tab: All' : 'Switch preset'));
   } } } as unknown as ExtensionCommandContext;
   const rpcState = newDashboardState(); rpcState.tab = 'models';
@@ -224,5 +231,7 @@ test('Models tab is global, hides publish, and routes model edit/add/refresh act
   assert.match(titles[0], /Models — global/);
   assert.match(titles[0], /models\.json is not part of presets/);
   assert.match(titles[0], /changes apply after \/reload/);
-  assert.equal(titles[0].includes('Publish'), false);
+  assert.equal(optionsSeen[0].some(option => option.includes('Publish')), false);
+  assert.equal(optionsSeen[0].some(option => option.includes('Switch preset')), false);
+  assert.equal(optionsSeen[1].some(option => option.includes('Publish')), true);
 });
