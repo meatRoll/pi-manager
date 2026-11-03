@@ -38,6 +38,16 @@ test('native Pi selector Escape clears search first then cancels', async () => {
   assert.equal(await result, undefined);
 });
 
+test('native selector omits search for edit and action menus', async () => {
+  const h = host();
+  const result = choose(h.ctx, 'Edit fields', [{ label: 'Name: Fast', value: 'name' }, { label: 'Save changes', value: ':save' }], { search: false });
+  const component = h.component(); component.focused = true;
+  const rendered = component.render(60).join('\n');
+  assert.ok(!rendered.includes('Search:')); assert.ok(!rendered.includes('↑ search'));
+  component.handleInput!('\r');
+  assert.equal(await result, 'name');
+});
+
 test('native checklist focuses search by moving up from the first row without a slash shortcut', async () => {
   const h = host();
   const result = checklist(h.ctx, 'Pick', [{ label: 'alpha', value: 'a' }, { label: 'beta', value: 'b' }]);

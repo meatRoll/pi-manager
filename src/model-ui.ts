@@ -125,7 +125,7 @@ async function editFields<T>(
       { label: 'Save changes', value: ':save' },
       { label: 'Cancel', value: ':cancel' },
       ...fields.map(field => ({ label: `${field.label}: ${clip(field.detail(draft), 72)}`, value: field.id })),
-    ]);
+    ], { search: false });
     if (!action || action === ':cancel') return false;
     if (action === ':save') {
       try { await save(draft); return true; }
@@ -193,7 +193,7 @@ async function chooseValue<T>(
   const entries: Array<{ label: string; value: T | null | undefined }> = options.map(item => ({ ...item, label: `${item.label}${current === item.value ? ' (current)' : ''}` }));
   if (allowUnset) entries.push({ label: THINKING_UNSET, value: null });
   entries.push({ label: 'Cancel', value: undefined });
-  return choose<T | null | undefined>(ctx, title, entries);
+  return choose<T | null | undefined>(ctx, title, entries, { search: false });
 }
 
 async function chooseApi(ctx: ExtensionCommandContext, current: string | undefined, allowUnset: boolean): Promise<string | null | undefined> {
@@ -202,7 +202,7 @@ async function chooseApi(ctx: ExtensionCommandContext, current: string | undefin
     { label: 'Custom…', value: ':custom' },
     ...(allowUnset || current ? [{ label: 'Clear', value: ':clear' }] : []),
     { label: 'Cancel', value: ':cancel' },
-  ]);
+  ], { search: false });
   if (!selected || selected === ':cancel') return undefined;
   if (selected === ':clear') return null;
   if (selected !== ':custom') return selected;
@@ -253,7 +253,7 @@ function providerFields(ctx: ExtensionCommandContext): FormField<ProviderDefinit
           { label: 'Command… (runs locally)', value: 'command' },
           { label: 'Clear', value: 'clear' },
           { label: 'Cancel', value: 'cancel' },
-        ]);
+        ], { search: false });
         if (!action || action === 'cancel') return;
         if (action === 'clear') { delete provider.apiKey; return; }
         if (action === 'literal') {
@@ -287,7 +287,7 @@ function providerFields(ctx: ExtensionCommandContext): FormField<ProviderDefinit
     {
       id: 'oauth', label: 'OAuth', detail: provider => provider.oauth ?? '(none)',
       edit: async provider => {
-        const value = await choose(ctx, 'OAuth flow', [{ label: '(none)', value: '' }, { label: 'radius', value: 'radius' }, { label: 'Cancel', value: ':cancel' }]);
+        const value = await choose(ctx, 'OAuth flow', [{ label: '(none)', value: '' }, { label: 'radius', value: 'radius' }, { label: 'Cancel', value: ':cancel' }], { search: false });
         if (value === undefined || value === ':cancel') return;
         if (value === 'radius') provider.oauth = 'radius'; else delete provider.oauth;
       },
@@ -334,7 +334,7 @@ function modelFields(ctx: ExtensionCommandContext, override: boolean): FormField
         if (!override) { model.reasoning = !(model.reasoning ?? false); return; }
         const value = await choose<boolean | null | undefined>(ctx, 'Reasoning override', [
           { label: '(inherit)', value: null }, { label: 'true', value: true }, { label: 'false', value: false }, { label: 'Cancel', value: undefined },
-        ]);
+        ], { search: false });
         if (value === undefined) return;
         if (value === null) delete model.reasoning; else model.reasoning = value;
       },
@@ -346,7 +346,7 @@ function modelFields(ctx: ExtensionCommandContext, override: boolean): FormField
           { label: 'text', value: ['text'] }, { label: 'text+image', value: ['text', 'image'] },
           ...(override ? [{ label: '(inherit)', value: null }] : []),
           { label: 'Cancel', value: undefined },
-        ]);
+        ], { search: false });
         if (value === undefined) return;
         if (value === null) delete model.input; else model.input = value;
       },
@@ -371,7 +371,7 @@ function modelFields(ctx: ExtensionCommandContext, override: boolean): FormField
             { label: `Cache read: ${model.cost?.cacheRead ?? '(unset)'}`, value: 'cacheRead' },
             { label: `Cache write: ${model.cost?.cacheWrite ?? '(unset)'}`, value: 'cacheWrite' },
             { label: 'Cancel', value: ':cancel' },
-          ]);
+          ], { search: false });
           if (!action || action === ':cancel') return;
           const key = action as 'input' | 'output' | 'cacheRead' | 'cacheWrite';
           const value = await inputNumber(ctx, `Cost · ${key}`, model.cost?.[key]);
@@ -595,7 +595,7 @@ export async function modelFlow(ctx: ExtensionCommandContext, providerId: string
       ...(isDefault ? [] : [{ label: 'Use as default for new sessions', value: 'default' }]),
       { label: enabled ? 'Remove from enabled models' : 'Add to enabled models', value: 'enabled' },
       { label: 'Delete model…', value: 'delete' },
-    ]);
+    ], { search: false });
     if (!action) return;
     if (action === 'fields') { await editModel(ctx, providerId, model, false, doc); continue; }
     if (action === 'json') { await editModelJsonFlow(ctx, providerId, modelId); continue; }
@@ -661,7 +661,7 @@ async function overrideFlow(ctx: ExtensionCommandContext, providerId: string, mo
       { label: 'Edit override fields…', value: 'fields' },
       { label: 'Edit override JSON…', value: 'json' },
       { label: 'Delete override…', value: 'delete' },
-    ]);
+    ], { search: false });
     if (!action) return;
     if (action === 'fields') { await editOverride(ctx, providerId, modelId, override, doc); continue; }
     if (action === 'json') { await editOverrideJsonFlow(ctx, providerId, modelId); continue; }
@@ -759,7 +759,7 @@ export async function providerFlow(ctx: ExtensionCommandContext, providerId: str
       { label: 'Edit provider JSON…', value: 'json' },
       { label: 'Duplicate provider…', value: 'duplicate' },
       { label: 'Delete provider…', value: 'delete' },
-    ]);
+    ], { search: false });
     if (!action) return;
     if (action === 'models') { await providerModelsFlow(ctx, providerId); continue; }
     if (action === 'fields') { await editProvider(ctx, providerId, provider, false, doc); continue; }
@@ -818,7 +818,7 @@ async function preflight(
       { label: plan.commands.length ? 'Run request (executes local auth command)' : 'Run request', value: 'run' },
       { label: 'Change Models URL…', value: 'url' },
       { label: 'Cancel', value: 'cancel' },
-    ]);
+    ], { search: false });
     if (!action || action === 'cancel') return undefined;
     if (action === 'url') {
       const value = await ctx.ui.input('Models URL', plan.url);

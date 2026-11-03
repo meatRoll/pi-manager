@@ -1,6 +1,6 @@
 import { Text, Input, SelectList, Key, matchesKey, truncateToWidth } from '@earendil-works/pi-tui';
 import { plain } from './terminal.js';
-export async function choose(ctx, title, choices) {
+export async function choose(ctx, title, choices, options = {}) {
     // Prefix indices to keep distinct resources selectable even with equal names.
     const labels = choices.map((item, index) => `${index + 1}. ${plain(item.label).replace(/[\r\n]/g, ' ')}`);
     if (ctx.mode !== 'tui') {
@@ -9,6 +9,7 @@ export async function choose(ctx, title, choices) {
         return index < 0 ? undefined : choices[index].value;
     }
     return ctx.ui.custom((tui, theme, _keys, done) => {
+        const searchable = options.search !== false;
         let searching = false, focused = false;
         let visible = [];
         const input = new Input();
@@ -30,12 +31,20 @@ export async function choose(ctx, title, choices) {
             get focused() { return focused; },
             set focused(value) { focused = value; input.focused = focused && searching; },
             render(width) {
-                return [truncateToWidth(theme.fg('accent', plain(title)), width), '',
-                    ...(searching ? input.render(width) : [truncateToWidth(theme.fg('muted', `Search: ${input.getValue() || '( ↑ from first row )'}`), width)]), '',
-                    ...list.render(width).map(line => truncateToWidth(line, width)), '', truncateToWidth(theme.fg('dim', '↑↓ select · Enter open · ↑ search · Esc back'), width)];
+                const searchLine = searchable
+                    ? [...(searching ? input.render(width) : [truncateToWidth(theme.fg('muted', `Search: ${input.getValue() || '( ↑ from first row )'}`), width)]), '']
+                    : [];
+                const footer = searchable ? '↑↓ select · Enter open · ↑ search · Esc back' : '↑↓ select · Enter open · Esc back';
+                return [truncateToWidth(theme.fg('accent', plain(title)), width), '', ...searchLine,
+                    ...list.render(width).map(line => truncateToWidth(line, width)), '', truncateToWidth(theme.fg('dim', footer), width)];
             },
             invalidate() { list.invalidate(); input.invalidate(); },
             handleInput(data) {
+                if (!searchable) {
+                    list.handleInput(data);
+                    tui.requestRender();
+                    return;
+                }
                 const up = matchesKey(data, Key.up), down = matchesKey(data, Key.down);
                 const pageUp = matchesKey(data, Key.pageUp), pageDown = matchesKey(data, Key.pageDown);
                 if (searching && matchesKey(data, Key.escape)) {

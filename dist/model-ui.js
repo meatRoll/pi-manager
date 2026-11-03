@@ -93,7 +93,7 @@ async function editFields(ctx, title, draft, fields, save) {
             { label: 'Save changes', value: ':save' },
             { label: 'Cancel', value: ':cancel' },
             ...fields.map(field => ({ label: `${field.label}: ${clip(field.detail(draft), 72)}`, value: field.id })),
-        ]);
+        ], { search: false });
         if (!action || action === ':cancel')
             return false;
         if (action === ':save') {
@@ -179,7 +179,7 @@ async function chooseValue(ctx, title, options, current, allowUnset = false) {
     if (allowUnset)
         entries.push({ label: THINKING_UNSET, value: null });
     entries.push({ label: 'Cancel', value: undefined });
-    return choose(ctx, title, entries);
+    return choose(ctx, title, entries, { search: false });
 }
 async function chooseApi(ctx, current, allowUnset) {
     const selected = await choose(ctx, 'API', [
@@ -187,7 +187,7 @@ async function chooseApi(ctx, current, allowUnset) {
         { label: 'Custom…', value: ':custom' },
         ...(allowUnset || current ? [{ label: 'Clear', value: ':clear' }] : []),
         { label: 'Cancel', value: ':cancel' },
-    ]);
+    ], { search: false });
     if (!selected || selected === ':cancel')
         return undefined;
     if (selected === ':clear')
@@ -241,7 +241,7 @@ function providerFields(ctx) {
                     { label: 'Command… (runs locally)', value: 'command' },
                     { label: 'Clear', value: 'clear' },
                     { label: 'Cancel', value: 'cancel' },
-                ]);
+                ], { search: false });
                 if (!action || action === 'cancel')
                     return;
                 if (action === 'clear') {
@@ -288,7 +288,7 @@ function providerFields(ctx) {
         {
             id: 'oauth', label: 'OAuth', detail: provider => provider.oauth ?? '(none)',
             edit: async (provider) => {
-                const value = await choose(ctx, 'OAuth flow', [{ label: '(none)', value: '' }, { label: 'radius', value: 'radius' }, { label: 'Cancel', value: ':cancel' }]);
+                const value = await choose(ctx, 'OAuth flow', [{ label: '(none)', value: '' }, { label: 'radius', value: 'radius' }, { label: 'Cancel', value: ':cancel' }], { search: false });
                 if (value === undefined || value === ':cancel')
                     return;
                 if (value === 'radius')
@@ -340,7 +340,7 @@ function modelFields(ctx, override) {
             }
             const value = await choose(ctx, 'Reasoning override', [
                 { label: '(inherit)', value: null }, { label: 'true', value: true }, { label: 'false', value: false }, { label: 'Cancel', value: undefined },
-            ]);
+            ], { search: false });
             if (value === undefined)
                 return;
             if (value === null)
@@ -355,7 +355,7 @@ function modelFields(ctx, override) {
                 { label: 'text', value: ['text'] }, { label: 'text+image', value: ['text', 'image'] },
                 ...(override ? [{ label: '(inherit)', value: null }] : []),
                 { label: 'Cancel', value: undefined },
-            ]);
+            ], { search: false });
             if (value === undefined)
                 return;
             if (value === null)
@@ -383,7 +383,7 @@ function modelFields(ctx, override) {
                     { label: `Cache read: ${model.cost?.cacheRead ?? '(unset)'}`, value: 'cacheRead' },
                     { label: `Cache write: ${model.cost?.cacheWrite ?? '(unset)'}`, value: 'cacheWrite' },
                     { label: 'Cancel', value: ':cancel' },
-                ]);
+                ], { search: false });
                 if (!action || action === ':cancel')
                     return;
                 const key = action;
@@ -667,7 +667,7 @@ export async function modelFlow(ctx, providerId, modelId) {
             ...(isDefault ? [] : [{ label: 'Use as default for new sessions', value: 'default' }]),
             { label: enabled ? 'Remove from enabled models' : 'Add to enabled models', value: 'enabled' },
             { label: 'Delete model…', value: 'delete' },
-        ]);
+        ], { search: false });
         if (!action)
             return;
         if (action === 'fields') {
@@ -771,7 +771,7 @@ async function overrideFlow(ctx, providerId, modelId) {
             { label: 'Edit override fields…', value: 'fields' },
             { label: 'Edit override JSON…', value: 'json' },
             { label: 'Delete override…', value: 'delete' },
-        ]);
+        ], { search: false });
         if (!action)
             return;
         if (action === 'fields') {
@@ -954,7 +954,7 @@ export async function providerFlow(ctx, providerId) {
             { label: 'Edit provider JSON…', value: 'json' },
             { label: 'Duplicate provider…', value: 'duplicate' },
             { label: 'Delete provider…', value: 'delete' },
-        ]);
+        ], { search: false });
         if (!action)
             return;
         if (action === 'models') {
@@ -1054,7 +1054,7 @@ async function preflight(ctx, providerId, provider, title) {
             { label: plan.commands.length ? 'Run request (executes local auth command)' : 'Run request', value: 'run' },
             { label: 'Change Models URL…', value: 'url' },
             { label: 'Cancel', value: 'cancel' },
-        ]);
+        ], { search: false });
         if (!action || action === 'cancel')
             return undefined;
         if (action === 'url') {
