@@ -545,7 +545,10 @@ async function providerModelsFlow(ctx: ExtensionCommandContext, providerId: stri
   const provider = providerOf(requireModels(doc), providerId);
   if (!provider) { ctx.ui.notify(`Provider not found: ${providerId}`, 'error'); return; }
   const configured = provider.models ?? [];
-  if (!configured.length) { ctx.ui.notify('No models. Use A on the Models page to add one.', 'info'); return; }
+  if (!configured.length) {
+    await view(ctx, `Provider ${providerId} — models`, 'No models in this provider yet.\n\nUse A on the Models page to add one.');
+    return;
+  }
   const action = await choose(ctx, `Provider ${providerId} — models`, configured.map(model => (
     { label: `${model.name || model.id} · ${modelDetail(model)}`, value: `model:${model.id}` }
   )));
