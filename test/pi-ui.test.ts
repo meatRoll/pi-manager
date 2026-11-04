@@ -62,6 +62,27 @@ test('native checklist focuses search by moving up from the first row without a 
   assert.deepEqual(await result, ['b']);
 });
 
+test('native checklist keeps the cursor on the toggled row', async () => {
+  const h = host();
+  const result = checklist(h.ctx, 'Pick', [
+    { label: 'alpha', value: 'a' },
+    { label: 'beta', value: 'b' },
+    { label: 'gamma', value: 'c' },
+  ]);
+  const component = h.component(); component.focused = true;
+  const row = (label: string) => component.render(50).find(line => line.includes(label));
+  component.handleInput!('\x1b[B'); component.handleInput!('\x1b[B'); // move to gamma
+  component.handleInput!(' '); // toggle gamma
+  assert.ok(row('gamma')?.includes('→'));
+  assert.ok(row('gamma')?.includes('[x]'));
+  component.handleInput!(' '); // untoggle in place
+  assert.ok(row('gamma')?.includes('→'));
+  assert.ok(row('gamma')?.includes('[ ]'));
+  component.handleInput!(' ');
+  component.handleInput!('\r');
+  assert.deepEqual(await result, ['c']);
+});
+
 test('native preview action key returns its value and renders the shortcut', async () => {
   const h = host();
   const result = view(h.ctx, 'Provider xs — models', 'No models in this provider yet.', { key: 'a', label: 'add model', value: 'add-model' });

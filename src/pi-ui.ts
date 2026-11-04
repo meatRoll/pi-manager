@@ -116,6 +116,9 @@ export async function checklist<T>(ctx: ExtensionCommandContext, title: string, 
       .filter(entry => plain(`${entry.item.label} ${entry.item.detail || ''}`).toLowerCase().includes(query.toLowerCase()));
     const finish = (result: T[] | undefined) => { if (!finished) { finished = true; done(result); } };
     const rebuild = () => {
+      // SelectList always starts at its first row. Rebuilding after a toggle must
+      // put the cursor back on the row the user acted on, not at the top.
+      const previous = list?.getSelectedItem()?.value;
       const visible = filtered();
       list = new SelectList(visible.map(entry => ({
         value: String(entry.index),
@@ -125,6 +128,10 @@ export async function checklist<T>(ctx: ExtensionCommandContext, title: string, 
         selectedPrefix: text => theme.fg('accent', text), selectedText: text => theme.fg('accent', text),
         description: text => theme.fg('muted', text), scrollInfo: text => theme.fg('dim', text), noMatch: text => theme.fg('warning', text),
       }, { minPrimaryColumnWidth: 24, maxPrimaryColumnWidth: 88 });
+      if (previous !== undefined) {
+        const index = visible.findIndex(entry => String(entry.index) === previous);
+        if (index >= 0) list.setSelectedIndex(index);
+      }
       list.onSelect = () => finish(chosen(selected));
       list.onCancel = () => finish(undefined);
       listHeight = height;
