@@ -130,6 +130,27 @@ test('add provider and model flows edit fields, normalize defaults, and write ba
   const pages = ui.buildModelPages(afterModel, settings);
   assert.ok(pages.providers.some(row => row.id === 'model:provider:local' && row.editable));
   assert.ok(pages.models.some(row => row.id === 'model:entry:local/fast' && row.editable));
+
+  const reused = fakeContext([
+    { kind: 'input', value: 'flash' },
+    { kind: 'select', contains: 'Apply configuration from model' },
+    { kind: 'select', contains: 'local/fast' },
+    { kind: 'select', contains: 'Save changes' },
+  ]);
+  await ui.addModelFlow(reused.ctx, 'local');
+  assert.equal(reused.steps.length, 0);
+  assert.ok(reused.notes.some(note => note.includes('Applied configuration from local/fast')));
+  const reusedModels = await config.readModels();
+  const flash = reusedModels.value?.providers?.local.models?.find(model => model.id === 'flash');
+  assert.ok(flash);
+  assert.equal(flash.name, undefined);
+  assert.equal(flash.reasoning, saved.reasoning);
+  assert.deepEqual(flash.input, saved.input);
+  assert.equal(flash.contextWindow, saved.contextWindow);
+  assert.equal(flash.maxTokens, saved.maxTokens);
+  assert.deepEqual(flash.cost, saved.cost);
+  assert.equal(flash.api, undefined);
+  assert.equal(flash.baseUrl, undefined);
 });
 
 test('defaults and enabled models flows write settings without touching models.json', async () => {

@@ -305,13 +305,32 @@ async function editProvider(ctx: ExtensionCommandContext, providerId: string, pr
   });
 }
 
-function modelFields(ctx: ExtensionCommandContext, override: boolean): FormField<ModelDefinition>[] {
-  const fields: FormField<ModelDefinition>[] = [
-    {
-      id: 'name', label: 'Name', detail: model => model.name ?? '(unset)',
-      edit: async model => { const value = await inputText(ctx, 'Model name', model.name); if (value !== undefined) model.name = value ?? undefined; },
+interface ModelSource { ref: string; model: ModelDefinition }
+
+function modelFields(ctx: ExtensionCommandContext, override: boolean, sources: ModelSource[] = []): FormField<ModelDefinition>[] {
+  const fields: FormField<ModelDefinition>[] = [];
+  if (!override && sources.length) fields.push({
+    id: 'apply', label: 'Apply configuration from model…',
+    detail: () => `${sources.length} configured model${sources.length === 1 ? '' : 's'}`,
+    edit: async model => {
+      const selected = await choose<string>(ctx, 'Apply model configuration', [
+        ...sources.map(source => ({ label: `${source.ref} · ${modelDetail(source.model)}`, value: source.ref })),
+        { label: 'Cancel', value: ':cancel' },
+      ]);
+      if (!selected || selected === ':cancel') return;
+      const source = sources.find(item => item.ref === selected);
+      if (!source) return;
+      const id = model.id, name = model.name;
+      for (const key of Object.keys(model)) delete (model as Record<string, unknown>)[key];
+      Object.assign(model, structuredClone(source.model), { id });
+      if (name) model.name = name; else delete model.name;
+      ctx.ui.notify(`Applied configuration from ${source.ref}. Save changes to persist.`, 'info');
     },
-  ];
+  });
+  fields.push({
+    id: 'name', label: 'Name', detail: model => model.name ?? '(unset)',
+    edit: async model => { const value = await inputText(ctx, 'Model name', model.name); if (value !== undefined) model.name = value ?? undefined; },
+  });
   if (!override) {
     fields.push(
       {
@@ -411,6 +430,17 @@ function modelFields(ctx: ExtensionCommandContext, override: boolean): FormField
   return fields;
 }
 
+function modelSources(models: ModelsConfig | undefined, targetRef: string): ModelSource[] {
+  const sources: ModelSource[] = [];
+  for (const [providerId, provider] of providersOf(models ?? {})) {
+    for (const model of provider.models ?? []) {
+      const ref = `${providerId}/${model.id}`;
+      if (ref !== targetRef) sources.push({ ref, model });
+    }
+  }
+  return sources;
+}
+
 function normalizeModel(draft: ModelDefinition): ModelDefinition {
   const model = structuredClone(draft);
   model.id = model.id.trim();
@@ -437,7 +467,8 @@ async function editModel(
   ctx: ExtensionCommandContext, providerId: string, model: ModelDefinition, create: boolean, base: ConfigDocument<ModelsConfig>,
 ): Promise<boolean> {
   const draft = structuredClone(model);
-  return editFields(ctx, `Model ${providerId}/${model.id} — edit fields (blank clears; Esc keeps)`, draft, modelFields(ctx, false), async saved => {
+  return editFields(ctx, `Model ${providerId}/${model.id} — edit fields (blank clears; Esc keeps)`, draft,
+    modelFields(ctx, false, modelSources(base.value, `${providerId}/${model.id}`)), async saved => {
     const candidate = structuredClone(requireModels(base));
     const provider = providerOf(candidate, providerId);
     if (!provider) throw new Error(`Provider not found: ${providerId}`);

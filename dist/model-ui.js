@@ -309,14 +309,38 @@ async function editProvider(ctx, providerId, provider, create, base) {
         await saveModelsFrom(ctx, base, candidate, `Provider ${providerId} saved`);
     });
 }
-function modelFields(ctx, override) {
-    const fields = [
-        {
-            id: 'name', label: 'Name', detail: model => model.name ?? '(unset)',
-            edit: async (model) => { const value = await inputText(ctx, 'Model name', model.name); if (value !== undefined)
-                model.name = value ?? undefined; },
-        },
-    ];
+function modelFields(ctx, override, sources = []) {
+    const fields = [];
+    if (!override && sources.length)
+        fields.push({
+            id: 'apply', label: 'Apply configuration from model…',
+            detail: () => `${sources.length} configured model${sources.length === 1 ? '' : 's'}`,
+            edit: async (model) => {
+                const selected = await choose(ctx, 'Apply model configuration', [
+                    ...sources.map(source => ({ label: `${source.ref} · ${modelDetail(source.model)}`, value: source.ref })),
+                    { label: 'Cancel', value: ':cancel' },
+                ]);
+                if (!selected || selected === ':cancel')
+                    return;
+                const source = sources.find(item => item.ref === selected);
+                if (!source)
+                    return;
+                const id = model.id, name = model.name;
+                for (const key of Object.keys(model))
+                    delete model[key];
+                Object.assign(model, structuredClone(source.model), { id });
+                if (name)
+                    model.name = name;
+                else
+                    delete model.name;
+                ctx.ui.notify(`Applied configuration from ${source.ref}. Save changes to persist.`, 'info');
+            },
+        });
+    fields.push({
+        id: 'name', label: 'Name', detail: model => model.name ?? '(unset)',
+        edit: async (model) => { const value = await inputText(ctx, 'Model name', model.name); if (value !== undefined)
+            model.name = value ?? undefined; },
+    });
     if (!override) {
         fields.push({
             id: 'api', label: 'API', detail: model => model.api ?? '(inherit provider)',
@@ -427,6 +451,17 @@ function modelFields(ctx, override) {
     });
     return fields;
 }
+function modelSources(models, targetRef) {
+    const sources = [];
+    for (const [providerId, provider] of providersOf(models ?? {})) {
+        for (const model of provider.models ?? []) {
+            const ref = `${providerId}/${model.id}`;
+            if (ref !== targetRef)
+                sources.push({ ref, model });
+        }
+    }
+    return sources;
+}
 function normalizeModel(draft) {
     const model = structuredClone(draft);
     model.id = model.id.trim();
@@ -454,7 +489,7 @@ function normalizeModel(draft) {
 }
 async function editModel(ctx, providerId, model, create, base) {
     const draft = structuredClone(model);
-    return editFields(ctx, `Model ${providerId}/${model.id} — edit fields (blank clears; Esc keeps)`, draft, modelFields(ctx, false), async (saved) => {
+    return editFields(ctx, `Model ${providerId}/${model.id} — edit fields (blank clears; Esc keeps)`, draft, modelFields(ctx, false, modelSources(base.value, `${providerId}/${model.id}`)), async (saved) => {
         const candidate = structuredClone(requireModels(base));
         const provider = providerOf(candidate, providerId);
         if (!provider)
