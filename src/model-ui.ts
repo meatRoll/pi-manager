@@ -544,13 +544,13 @@ async function providerModelsFlow(ctx: ExtensionCommandContext, providerId: stri
   if (doc.error) { ctx.ui.notify(doc.error, 'error'); return; }
   const provider = providerOf(requireModels(doc), providerId);
   if (!provider) { ctx.ui.notify(`Provider not found: ${providerId}`, 'error'); return; }
-  const action = await choose(ctx, `Provider ${providerId} — models`, [
-    ...(provider.models ?? []).map(model => ({ label: `${model.name || model.id} · ${modelDetail(model)}`, value: `model:${model.id}` })),
-    { label: '+ Add model…', value: ':add' },
-  ]);
+  const configured = provider.models ?? [];
+  if (!configured.length) { ctx.ui.notify('No models. Use A on the Models page to add one.', 'info'); return; }
+  const action = await choose(ctx, `Provider ${providerId} — models`, configured.map(model => (
+    { label: `${model.name || model.id} · ${modelDetail(model)}`, value: `model:${model.id}` }
+  )));
   if (!action) return;
-  if (action === ':add') { await addModelFlow(ctx, providerId); return; }
-  if (action.startsWith('model:')) await modelFlow(ctx, providerId, action.slice('model:'.length));
+  await modelFlow(ctx, providerId, action.slice('model:'.length));
 }
 
 async function setDefaultFlow(ctx: ExtensionCommandContext, providerId: string, modelId: string): Promise<void> {
@@ -749,7 +749,6 @@ export async function providerFlow(ctx: ExtensionCommandContext, providerId: str
     const action = await choose(ctx, `Provider ${providerId} — ${provider.name || 'unnamed'}`, [
       { label: `Models (${provider.models?.length ?? 0})…`, value: 'models' },
       { label: 'Edit provider fields…', value: 'fields' },
-      { label: '+ Add model…', value: 'add-model' },
       { label: 'Fetch models from endpoint…', value: 'fetch' },
       { label: 'Test endpoint…', value: 'test' },
       { label: `Model overrides (${overrideCount})…`, value: 'overrides' },
@@ -760,7 +759,6 @@ export async function providerFlow(ctx: ExtensionCommandContext, providerId: str
     if (!action) return;
     if (action === 'models') { await providerModelsFlow(ctx, providerId); continue; }
     if (action === 'fields') { await editProvider(ctx, providerId, provider, false, doc); continue; }
-    if (action === 'add-model') { await addModelFlow(ctx, providerId); continue; }
     if (action === 'fetch') { await fetchModelsFlow(ctx, providerId); continue; }
     if (action === 'test') { await testEndpointFlow(ctx, providerId); continue; }
     if (action === 'overrides') { await overridesFlow(ctx, providerId); continue; }
@@ -1005,8 +1003,6 @@ export async function enabledFlow(ctx: ExtensionCommandContext): Promise<void> {
 }
 
 export async function runModelAction(ctx: ExtensionCommandContext, id: string, kind: 'open' | 'toggle' | 'edit' | 'delete' = 'open'): Promise<void> {
-  if (id === 'model:add-provider') return addProviderFlow(ctx);
-  if (id === 'model:add-model') return addModelToProviderFlow(ctx);
   if (id === 'model:raw') return editModelsJsonFlow(ctx);
   if (id === 'model:defaults') return defaultsFlow(ctx);
   if (id === 'model:enabled') return enabledFlow(ctx);

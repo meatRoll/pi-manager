@@ -604,18 +604,15 @@ async function providerModelsFlow(ctx, providerId) {
         ctx.ui.notify(`Provider not found: ${providerId}`, 'error');
         return;
     }
-    const action = await choose(ctx, `Provider ${providerId} — models`, [
-        ...(provider.models ?? []).map(model => ({ label: `${model.name || model.id} · ${modelDetail(model)}`, value: `model:${model.id}` })),
-        { label: '+ Add model…', value: ':add' },
-    ]);
-    if (!action)
-        return;
-    if (action === ':add') {
-        await addModelFlow(ctx, providerId);
+    const configured = provider.models ?? [];
+    if (!configured.length) {
+        ctx.ui.notify('No models. Use A on the Models page to add one.', 'info');
         return;
     }
-    if (action.startsWith('model:'))
-        await modelFlow(ctx, providerId, action.slice('model:'.length));
+    const action = await choose(ctx, `Provider ${providerId} — models`, configured.map(model => ({ label: `${model.name || model.id} · ${modelDetail(model)}`, value: `model:${model.id}` })));
+    if (!action)
+        return;
+    await modelFlow(ctx, providerId, action.slice('model:'.length));
 }
 async function setDefaultFlow(ctx, providerId, modelId) {
     const doc = await readSettings();
@@ -944,7 +941,6 @@ export async function providerFlow(ctx, providerId) {
         const action = await choose(ctx, `Provider ${providerId} — ${provider.name || 'unnamed'}`, [
             { label: `Models (${provider.models?.length ?? 0})…`, value: 'models' },
             { label: 'Edit provider fields…', value: 'fields' },
-            { label: '+ Add model…', value: 'add-model' },
             { label: 'Fetch models from endpoint…', value: 'fetch' },
             { label: 'Test endpoint…', value: 'test' },
             { label: `Model overrides (${overrideCount})…`, value: 'overrides' },
@@ -960,10 +956,6 @@ export async function providerFlow(ctx, providerId) {
         }
         if (action === 'fields') {
             await editProvider(ctx, providerId, provider, false, doc);
-            continue;
-        }
-        if (action === 'add-model') {
-            await addModelFlow(ctx, providerId);
             continue;
         }
         if (action === 'fetch') {
@@ -1305,10 +1297,6 @@ export async function enabledFlow(ctx) {
     }
 }
 export async function runModelAction(ctx, id, kind = 'open') {
-    if (id === 'model:add-provider')
-        return addProviderFlow(ctx);
-    if (id === 'model:add-model')
-        return addModelToProviderFlow(ctx);
     if (id === 'model:raw')
         return editModelsJsonFlow(ctx);
     if (id === 'model:defaults')
