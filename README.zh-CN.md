@@ -157,8 +157,9 @@ Space toggle · Enter preview · E edit · A add · P publish
 
 Models 首页分别提供 **Providers** 和 **Models** 入口，**Enter** 进入列表，**Esc** 返回。
 添加 provider/model 使用 **A** 快捷键，不再作为列表选项，因此列表为空时 **A** 仍可使用。
-模型编辑表单里的 **Apply configuration from model…** 可以复制另一个已配置模型的字段，
-同时保留当前模型的 id 和 name。列表页在第一行按 **↑** 可把光标移到搜索框：输入即过滤，
+模型菜单和编辑表单里的 **Apply general config from model…** 可以复制另一个已配置模型的
+上下文、输入限制、多模态、思考/采样等通用配置，同时保留当前模型的 id、name、API、
+Base URL、headers 和 compatibility。列表页在第一行按 **↑** 可把光标移到搜索框：输入即过滤，
 **Enter** 退出搜索框，**Esc** 清空搜索或返回上一级；编辑和操作菜单不显示搜索框，也不再
 使用 `/` 搜索快捷键。
 

@@ -131,15 +131,21 @@ test('add provider and model flows edit fields, normalize defaults, and write ba
   assert.ok(pages.providers.some(row => row.id === 'model:provider:local' && row.editable));
   assert.ok(pages.models.some(row => row.id === 'model:entry:local/fast' && row.editable));
 
+  const sourceDoc = await config.readModels();
+  const sourceFast = sourceDoc.value?.providers?.local.models?.find(model => model.id === 'fast');
+  assert.ok(sourceFast);
+  config.setModel(sourceDoc.value!, 'local', { ...sourceFast, api: 'openai-responses', baseUrl: 'https://source.example/v1' });
+  await config.writeModels(sourceDoc.value!, { expectedRevision: sourceDoc.revision });
+
   const reused = fakeContext([
     { kind: 'input', value: 'flash' },
-    { kind: 'select', contains: 'Apply configuration from model' },
+    { kind: 'select', contains: 'Apply general config from model' },
     { kind: 'select', contains: 'local/fast' },
     { kind: 'select', contains: 'Save changes' },
   ]);
   await ui.addModelFlow(reused.ctx, 'local');
   assert.equal(reused.steps.length, 0);
-  assert.ok(reused.notes.some(note => note.includes('Applied configuration from local/fast')));
+  assert.ok(reused.notes.some(note => note.includes('Applied general config from local/fast')));
   const reusedModels = await config.readModels();
   const flash = reusedModels.value?.providers?.local.models?.find(model => model.id === 'flash');
   assert.ok(flash);

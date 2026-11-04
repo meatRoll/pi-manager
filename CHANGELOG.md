@@ -23,8 +23,9 @@ alter the current session.
 
 - The **Models** tab opens with separate **Providers** and **Models** pages.
   Add providers/models with **A** instead of list rows, including on empty lists
-  and from the empty provider-models view. Model forms can copy fields from
-  another configured model while preserving the target id and name. List pages
+  and from the empty provider-models view. Model menus/forms can copy general
+  capabilities from another configured model while preserving the target id,
+  name, API, Base URL, headers and compatibility. List pages
   focus search with Up from the first row; edit and action menus omit search,
   and `/` is no longer a shortcut.
 - Manage providers, models, and `modelOverrides` with structured forms or

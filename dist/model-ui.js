@@ -309,31 +309,74 @@ async function editProvider(ctx, providerId, provider, create, base) {
         await saveModelsFrom(ctx, base, candidate, `Provider ${providerId} saved`);
     });
 }
+/** Endpoint/auth fields stay with the target model; only portable model behavior is copied. */
+const GENERAL_MODEL_FIELDS = [
+    'reasoning', 'thinkingLevelMap', 'input', 'inputLimits', 'contextWindow', 'maxTokens',
+    'cost', 'promptCache', 'samplingParams', 'samplingParamsByThinkingLevel',
+];
+function applyGeneralModelConfig(target, source) {
+    for (const key of GENERAL_MODEL_FIELDS) {
+        const value = source[key];
+        if (value === undefined)
+            delete target[key];
+        else
+            target[key] = structuredClone(value);
+    }
+}
+async function chooseModelSource(ctx, sources, title) {
+    const selected = await choose(ctx, title, [
+        ...sources.map(source => ({ label: `${source.ref} · ${modelDetail(source.model)}`, value: source.ref })),
+        { label: 'Cancel', value: ':cancel' },
+    ]);
+    if (!selected || selected === ':cancel')
+        return undefined;
+    return sources.find(source => source.ref === selected);
+}
+async function applyModelConfigFlow(ctx, providerId, modelId) {
+    const base = await readModels();
+    if (base.error) {
+        ctx.ui.notify(base.error, 'error');
+        return;
+    }
+    const provider = providerOf(requireModels(base), providerId);
+    if (!provider?.models?.some(model => model.id === modelId)) {
+        ctx.ui.notify(`Model not found: ${providerId}/${modelId}`, 'error');
+        return;
+    }
+    const sources = modelSources(base.value, `${providerId}/${modelId}`);
+    if (!sources.length) {
+        ctx.ui.notify('No other configured models to copy from.', 'warning');
+        return;
+    }
+    const source = await chooseModelSource(ctx, sources, 'Apply general config from model');
+    if (!source)
+        return;
+    if (!await ctx.ui.confirm(`Apply general config from ${source.ref}?`, `Copies context, limits, modalities, thinking and sampling configuration to ${providerId}/${modelId}. API, Base URL, headers and compatibility stay unchanged.`))
+        return;
+    const candidate = structuredClone(requireModels(base));
+    const target = providerOf(candidate, providerId)?.models?.find(model => model.id === modelId);
+    if (!target)
+        throw new Error(`Model not found: ${providerId}/${modelId}`);
+    applyGeneralModelConfig(target, source.model);
+    try {
+        await saveModelsFrom(ctx, base, candidate, `Applied general config from ${source.ref} to ${providerId}/${modelId}`);
+    }
+    catch (error) {
+        await view(ctx, 'Cannot apply model configuration', errorMessage(error));
+    }
+}
 function modelFields(ctx, override, sources = []) {
     const fields = [];
     if (!override && sources.length)
         fields.push({
-            id: 'apply', label: 'Apply configuration from model…',
+            id: 'apply', label: 'Apply general config from model…',
             detail: () => `${sources.length} configured model${sources.length === 1 ? '' : 's'}`,
             edit: async (model) => {
-                const selected = await choose(ctx, 'Apply model configuration', [
-                    ...sources.map(source => ({ label: `${source.ref} · ${modelDetail(source.model)}`, value: source.ref })),
-                    { label: 'Cancel', value: ':cancel' },
-                ]);
-                if (!selected || selected === ':cancel')
-                    return;
-                const source = sources.find(item => item.ref === selected);
+                const source = await chooseModelSource(ctx, sources, 'Apply general config from model');
                 if (!source)
                     return;
-                const id = model.id, name = model.name;
-                for (const key of Object.keys(model))
-                    delete model[key];
-                Object.assign(model, structuredClone(source.model), { id });
-                if (name)
-                    model.name = name;
-                else
-                    delete model.name;
-                ctx.ui.notify(`Applied configuration from ${source.ref}. Save changes to persist.`, 'info');
+                applyGeneralModelConfig(model, source.model);
+                ctx.ui.notify(`Applied general config from ${source.ref}. Save changes to persist.`, 'info');
             },
         });
     fields.push({
@@ -694,6 +737,7 @@ export async function modelFlow(ctx, providerId, modelId) {
         const action = await choose(ctx, `Model ${providerId}/${modelId} · ${model.name || ''}`, [
             { label: 'Edit model fields…', value: 'fields' },
             { label: 'Edit model JSON…', value: 'json' },
+            { label: 'Apply general config from model…', value: 'apply' },
             { label: 'Duplicate model…', value: 'duplicate' },
             ...(isDefault ? [] : [{ label: 'Use as default for new sessions', value: 'default' }]),
             { label: enabled ? 'Remove from enabled models' : 'Add to enabled models', value: 'enabled' },
@@ -707,6 +751,10 @@ export async function modelFlow(ctx, providerId, modelId) {
         }
         if (action === 'json') {
             await editModelJsonFlow(ctx, providerId, modelId);
+            continue;
+        }
+        if (action === 'apply') {
+            await applyModelConfigFlow(ctx, providerId, modelId);
             continue;
         }
         if (action === 'default') {
