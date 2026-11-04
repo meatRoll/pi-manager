@@ -2,7 +2,7 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-**v1.7.2 — manage Pi's global providers, models, defaults, and enabledModels from one tab or CLI.** [Release notes](CHANGELOG.md) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
+**v1.7.3 — manage Pi's global providers, models, defaults, and enabledModels from one tab or CLI.** [Release notes](CHANGELOG.md) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
 
 A **Pi extension** for managing packages, skills, extensions, prompt templates, themes, preset Markdown context, and Pi's global model configuration **inside Pi**.
 

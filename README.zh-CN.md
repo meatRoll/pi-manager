@@ -2,7 +2,7 @@
 
 [English](README.md) | **简体中文**
 
-**v1.7.2 — 在 Models 分类或 CLI 中统一管理 Pi 的供应商、模型、默认项和 enabledModels。** [版本说明](CHANGELOG.md#简体中文) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
+**v1.7.3 — 在 Models 分类或 CLI 中统一管理 Pi 的供应商、模型、默认项和 enabledModels。** [版本说明](CHANGELOG.md#简体中文) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
 
 一个**在 Pi 里面使用的扩展**，管理插件包、Skills、Extensions、提示词模板、主题、预置 Markdown 上下文，以及 Pi 的全局模型配置。
 

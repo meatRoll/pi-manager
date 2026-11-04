@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.7.3 — Selecting a fetched model no longer jumps the list
+
+Toggling a model in the **Fetch models from endpoint…** checklist rebuilt the
+list from the first row, so adding several models meant scrolling back after
+every Space. The checklist now keeps the cursor on the row that was toggled;
+**A**, **N**, filtering and terminal resizes keep it in place too.
+
 ## v1.7.2 — The Models editor workflow is finished
 
 This release carries the v1.7.0 global model-configuration feature and the
@@ -240,6 +247,12 @@ The first stable release of **pi-manager**, a resource manager that runs inside 
 - 82 automated tests covering the dashboard, cancellation, migration, source-aware labels, publication, package recovery, isolation, and real Pi integration without model calls.
 
 ## 简体中文
+
+### v1.7.3 — 拉取模型后勾选不再跳回列表顶部
+
+在 **Fetch models from endpoint…** 的模型清单里按 Space 勾选后，列表会从第一行
+重建，批量添加时每次都要重新滚动。现在勾选、**A**、**N**、搜索过滤和终端尺寸
+变化都会保留当前行。
 
 ### v1.7.2 — Models 编辑流程完成
 
