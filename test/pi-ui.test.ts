@@ -62,6 +62,16 @@ test('native checklist focuses search by moving up from the first row without a 
   assert.deepEqual(await result, ['b']);
 });
 
+test('native preview action key returns its value and renders the shortcut', async () => {
+  const h = host();
+  const result = view(h.ctx, 'Provider xs — models', 'No models in this provider yet.', { key: 'a', label: 'add model', value: 'add-model' });
+  const component = h.component(); component.focused = true;
+  const rendered = component.render(60).join('\n');
+  assert.match(rendered, /A add model/); assert.match(rendered, /Enter \/ Esc back/);
+  component.handleInput!('a');
+  assert.equal(await result, 'add-model');
+});
+
 test('native preview wraps to width, scrolls and completes without changing content', async () => {
   const h = host(); const result = view(h.ctx, 'Preview', '中文 preview\n'.repeat(50));
   const component = h.component();

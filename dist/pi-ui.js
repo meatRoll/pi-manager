@@ -237,12 +237,13 @@ export async function checklist(ctx, title, items, hint = '') {
         };
     });
 }
-export async function view(ctx, title, content) {
+export async function view(ctx, title, content, action) {
     if (ctx.mode !== 'tui') {
-        await ctx.ui.select(`${plain(title)}\n${plain(content).slice(0, 16000)}`, ['Back']);
-        return;
+        const selected = await ctx.ui.select(`${plain(title)}\n${plain(content).slice(0, 16000)}`, action ? [action.label, 'Back'] : ['Back']);
+        return action && selected === action.label ? action.value : undefined;
     }
-    await ctx.ui.custom((tui, theme, _keys, done) => {
+    const viewAction = action;
+    return ctx.ui.custom((tui, theme, _keys, done) => {
         let offset = 0, total = 0, height = 1;
         const text = new Text(plain(content).slice(0, 128 * 1024), 0, 0);
         return {
@@ -251,14 +252,19 @@ export async function view(ctx, title, content) {
                 total = lines.length;
                 height = Math.max(1, (process.stdout.rows || 24) - 10);
                 offset = Math.min(offset, Math.max(0, total - height));
+                const footer = `↑↓ / PgUp / PgDn scroll${viewAction ? ` · ${viewAction.key.toUpperCase()} ${viewAction.label}` : ''} · Enter / Esc back`;
                 return [truncateToWidth(theme.fg('accent', `pi-manager / ${plain(title)}`), width), '',
                     ...lines.slice(offset, offset + height), '',
-                    truncateToWidth(theme.fg('dim', '↑↓ / PgUp / PgDn scroll · Enter / Esc back'), width)];
+                    truncateToWidth(theme.fg('dim', footer), width)];
             },
             invalidate() { text.invalidate(); },
             handleInput(data) {
+                if (viewAction && (data === viewAction.key || data === viewAction.key.toUpperCase())) {
+                    done(viewAction.value);
+                    return;
+                }
                 if (matchesKey(data, Key.escape) || matchesKey(data, Key.enter)) {
-                    done();
+                    done(undefined);
                     return;
                 }
                 if (matchesKey(data, Key.up))

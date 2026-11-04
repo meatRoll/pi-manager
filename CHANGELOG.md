@@ -22,9 +22,9 @@ alter the current session.
 ### Features
 
 - The **Models** tab opens with separate **Providers** and **Models** pages.
-  Add providers/models with **A** instead of list rows, including on empty lists.
-  List pages focus search with Up from the first row; edit and action menus omit
-  search, and `/` is no longer a shortcut.
+  Add providers/models with **A** instead of list rows, including on empty lists
+  and from the empty provider-models view. List pages focus search with Up from
+  the first row; edit and action menus omit search, and `/` is no longer a shortcut.
 - Manage providers, models, and `modelOverrides` with structured forms or
   advanced JSON. Provider keys can be literal, `$ENV_VAR`, or `!command`; the
   command form explicitly warns that it runs locally. Unknown JSON fields are

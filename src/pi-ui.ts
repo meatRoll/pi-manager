@@ -182,12 +182,17 @@ export async function checklist<T>(ctx: ExtensionCommandContext, title: string, 
   });
 }
 
-export async function view(ctx: ExtensionCommandContext, title: string, content: unknown): Promise<void> {
+export interface ViewAction { key: string; label: string; value: string }
+export async function view(
+  ctx: ExtensionCommandContext, title: string, content: unknown, action?: ViewAction,
+): Promise<string | undefined> {
   if (ctx.mode !== 'tui') {
-    await ctx.ui.select(`${plain(title)}\n${plain(content).slice(0, 16000)}`, ['Back']);
-    return;
+    const selected = await ctx.ui.select(`${plain(title)}\n${plain(content).slice(0, 16000)}`,
+      action ? [action.label, 'Back'] : ['Back']);
+    return action && selected === action.label ? action.value : undefined;
   }
-  await ctx.ui.custom<void>((tui, theme, _keys, done) => {
+  const viewAction = action;
+  return ctx.ui.custom<string | undefined>((tui, theme, _keys, done) => {
     let offset = 0, total = 0, height = 1;
     const text = new Text(plain(content).slice(0, 128 * 1024), 0, 0);
     return {
@@ -195,13 +200,15 @@ export async function view(ctx: ExtensionCommandContext, title: string, content:
         const lines = text.render(Math.max(1, width)); total = lines.length;
         height = Math.max(1, (process.stdout.rows || 24) - 10);
         offset = Math.min(offset, Math.max(0, total - height));
+        const footer = `↑↓ / PgUp / PgDn scroll${viewAction ? ` · ${viewAction.key.toUpperCase()} ${viewAction.label}` : ''} · Enter / Esc back`;
         return [truncateToWidth(theme.fg('accent', `pi-manager / ${plain(title)}`), width), '',
           ...lines.slice(offset, offset + height), '',
-          truncateToWidth(theme.fg('dim', '↑↓ / PgUp / PgDn scroll · Enter / Esc back'), width)];
+          truncateToWidth(theme.fg('dim', footer), width)];
       },
       invalidate() { text.invalidate(); },
       handleInput(data: string) {
-        if (matchesKey(data, Key.escape) || matchesKey(data, Key.enter)) { done(); return; }
+        if (viewAction && (data === viewAction.key || data === viewAction.key.toUpperCase())) { done(viewAction.value); return; }
+        if (matchesKey(data, Key.escape) || matchesKey(data, Key.enter)) { done(undefined); return; }
         if (matchesKey(data, Key.up)) offset = Math.max(0, offset - 1);
         if (matchesKey(data, Key.down)) offset = Math.min(Math.max(0, total - height), offset + 1);
         if (matchesKey(data, Key.pageUp)) offset = Math.max(0, offset - height);

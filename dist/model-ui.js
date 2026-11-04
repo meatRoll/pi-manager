@@ -606,7 +606,9 @@ async function providerModelsFlow(ctx, providerId) {
     }
     const configured = provider.models ?? [];
     if (!configured.length) {
-        await view(ctx, `Provider ${providerId} — models`, 'No models in this provider yet.\n\nUse A on the Models page to add one.');
+        const action = await view(ctx, `Provider ${providerId} — models`, 'No models in this provider yet.', { key: 'a', label: 'add model', value: 'add-model' });
+        if (action === 'add-model')
+            await addModelFlow(ctx, providerId);
         return;
     }
     const action = await choose(ctx, `Provider ${providerId} — models`, configured.map(model => ({ label: `${model.name || model.id} · ${modelDetail(model)}`, value: `model:${model.id}` })));
