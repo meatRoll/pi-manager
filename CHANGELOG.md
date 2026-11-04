@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.7.2 — The Models editor workflow is finished
+
+This release carries the v1.7.0 global model-configuration feature and the
+v1.7.1 publication reconciliation fix, and finishes the Models tab workflow.
+
+- Providers and Models open as separate pages. **A** adds providers/models;
+  list rows contain only data, including when a list is empty. The empty
+  provider-models view stays open, and **A** adds a model to that provider.
+- Lists focus search by moving Up from the first row. Edit and action menus omit
+  search, and `/` is no longer a search shortcut.
+- Model menus and forms can copy general capabilities from another configured
+  model: context/output limits, input limits, modalities, reasoning/thinking,
+  cost, cache and sampling. The target's id, name, API, Base URL, headers and
+  compatibility stay unchanged.
+- The Models tab still cannot switch presets or publish.
+
 ## v1.7.1 — Published refs are the refs Pi actually runs
 
 Two gaps in v1.6.0's declarations could leave the running checkout different from
@@ -224,6 +240,20 @@ The first stable release of **pi-manager**, a resource manager that runs inside 
 - 82 automated tests covering the dashboard, cancellation, migration, source-aware labels, publication, package recovery, isolation, and real Pi integration without model calls.
 
 ## 简体中文
+
+### v1.7.2 — Models 编辑流程完成
+
+本版本包含 v1.7.0 的全局模型配置功能、v1.7.1 的发布引用修复，并完成 Models
+分类的交互整理。
+
+- **Providers** 和 **Models** 分成独立页面；使用 **A** 添加 provider/model，列表里只有
+  数据项，空列表也适用。空 provider 的 models 页面会保持打开，按 **A** 直接给该
+  provider 添加模型。
+- 列表在第一行按 **↑** 聚焦搜索；编辑和操作菜单不显示搜索框，`/` 不再是搜索快捷键。
+- 模型菜单和编辑表单可以复制另一个已配置模型的通用能力配置：上下文/输出限制、
+  输入限制、多模态、reasoning/thinking、cost、cache 和采样参数。目标模型的 id、
+  name、API、Base URL、headers 和 compatibility 保持不变。
+- Models 分类仍然不能切换预设或发布。
 
 ### v1.7.0 — 统一管理 Pi 模型配置
 
