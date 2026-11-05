@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.7.4 — Fetched-model checklists open on a selectable row
+
+The fetch checklist now starts on the first model that can still be added. If
+the first returned models are already configured, Space previously did nothing
+because the cursor sat on a disabled row. When every returned model is already
+configured, or the endpoint returns none, the checklist is skipped with a
+notice instead of opening a list where nothing can be selected.
+
 ## v1.7.3 — Selecting a fetched model no longer jumps the list
 
 Toggling a model in the **Fetch models from endpoint…** checklist rebuilt the
@@ -247,6 +255,12 @@ The first stable release of **pi-manager**, a resource manager that runs inside 
 - 82 automated tests covering the dashboard, cancellation, migration, source-aware labels, publication, package recovery, isolation, and real Pi integration without model calls.
 
 ## 简体中文
+
+### v1.7.4 — 拉取模型的清单从可选行开始
+
+拉取模型的清单现在会从第一个尚未配置的模型开始，所以即使返回列表开头都是已配置
+模型，按 Space 也能立即勾选。若返回的模型全部已配置（或返回为空），不再打开无法
+勾选的清单，而是直接提示。
 
 ### v1.7.3 — 拉取模型后勾选不再跳回列表顶部
 
