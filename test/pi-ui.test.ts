@@ -83,6 +83,23 @@ test('native checklist keeps the cursor on the toggled row', async () => {
   assert.deepEqual(await result, ['c']);
 });
 
+test('native checklist starts on the first selectable row when configured rows lead the list', async () => {
+  const h = host();
+  const result = checklist(h.ctx, 'Add models', [
+    { label: 'alpha', value: 'a', disabled: true },
+    { label: 'beta', value: 'b', disabled: true },
+    { label: 'gamma', value: 'c' },
+    { label: 'delta', value: 'd' },
+  ]);
+  const component = h.component(); component.focused = true;
+  const row = (label: string) => component.render(50).find(line => line.includes(label));
+  assert.ok(row('gamma')?.includes('→'));
+  component.handleInput!(' '); // Space toggles gamma immediately
+  assert.ok(row('gamma')?.includes('[x]'));
+  component.handleInput!('\r');
+  assert.deepEqual(await result, ['c']);
+});
+
 test('native preview action key returns its value and renders the shortcut', async () => {
   const h = host();
   const result = view(h.ctx, 'Provider xs — models', 'No models in this provider yet.', { key: 'a', label: 'add model', value: 'add-model' });

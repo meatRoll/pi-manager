@@ -1192,6 +1192,14 @@ export async function fetchModelsFlow(ctx, providerId) {
         return;
     }
     const configured = new Set((provider.models ?? []).map(model => model.id));
+    if (!result.models.length) {
+        ctx.ui.notify(`Endpoint returned no models for ${providerId}.`, 'info');
+        return;
+    }
+    if (!result.fresh) {
+        ctx.ui.notify(`All ${result.models.length} returned models are already configured in ${providerId}.`, 'info');
+        return;
+    }
     const selected = await checklist(ctx, `Add models — ${providerId} · ${result.models.length} returned · ${result.fresh} new`, result.models.map(model => ({
         label: model.id,
         value: model,

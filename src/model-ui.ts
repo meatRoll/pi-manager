@@ -930,6 +930,8 @@ export async function fetchModelsFlow(ctx: ExtensionCommandContext, providerId: 
     result = await working(ctx, 'Fetching models…', () => fetchProviderModels(provider, { modelsUrl: prepared.modelsUrl, allowCommands: true }));
   } catch (error) { await view(ctx, 'Fetch failed', discoveryFailure(error)); return; }
   const configured = new Set((provider.models ?? []).map(model => model.id));
+  if (!result.models.length) { ctx.ui.notify(`Endpoint returned no models for ${providerId}.`, 'info'); return; }
+  if (!result.fresh) { ctx.ui.notify(`All ${result.models.length} returned models are already configured in ${providerId}.`, 'info'); return; }
   const selected = await checklist<DiscoveredModel>(ctx,
     `Add models — ${providerId} · ${result.models.length} returned · ${result.fresh} new`,
     result.models.map(model => ({

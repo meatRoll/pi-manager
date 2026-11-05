@@ -152,6 +152,13 @@ export async function checklist(ctx, title, items, hint = '') {
                 if (index >= 0)
                     list.setSelectedIndex(index);
             }
+            else {
+                // Start on the first selectable row: a disabled first row makes Space
+                // look broken because disabled rows cannot be toggled.
+                const index = visible.findIndex(entry => !entry.item.disabled);
+                if (index > 0)
+                    list.setSelectedIndex(index);
+            }
             list.onSelect = () => finish(chosen(selected));
             list.onCancel = () => finish(undefined);
             listHeight = height;
