@@ -2,7 +2,7 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-**v1.7.4 — manage Pi's global providers, models, defaults, and enabledModels from one tab or CLI.** [Release notes](CHANGELOG.md) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
+**v1.7.5 — add npm/Git packages with A from every tab, not only Packages.** [Release notes](CHANGELOG.md) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
 
 A **Pi extension** for managing packages, skills, extensions, prompt templates, themes, preset Markdown context, and Pi's global model configuration **inside Pi**.
 
@@ -137,7 +137,7 @@ Unpublished changes · P publish for next start
 [x] pptx-preview                           skills · standalone · owned
 [x] APPEND_SYSTEM                          context · standalone · owned
 
-Space toggle · Enter preview · E edit · A add · P publish
+Space toggle · Enter preview · E edit · A add… · P publish
 ←→ / Tab category · S switch preset · / search · Esc close
 ```
 
@@ -145,7 +145,7 @@ The footer is contextual: it lists only the keys that currently do something. `E
 
 - **Space** toggles the selected resource/package directly in staging. **Enter** previews a resource, or opens package actions. **E** edits an owned copy; **Del** deletes an owned copy after confirmation. External/package originals stay read-only.
 - **←→** or **Tab / Shift+Tab** changes category on the same screen. **/** searches (Enter finishes searching; Enter again opens). Each category keeps its selection and search after preview, editing, or toggling. **Esc** clears search first, then closes. Preview supports `↑↓` and `PgUp` / `PgDn`.
-- **A** adds to the current category; **P** publishes only after confirmation. **R** refreshes metadata after edits from another process. The terminal panel opens immediately; resource discovery and the full byte comparison run in the background. Rows become usable before that comparison finishes, and the header says **Checking publication…** until a result is known. It then marks unpublished changes or an unknown comparison instead of claiming the live session changed. Closing or switching cancels the read-only work. External local packages are references, not tracked historical copies.
+- **A** adds to the current category: a resource tab offers `+ Import local copy (… )` next to `+ Add package`, and **Packages** prompts for the source directly, so adding a package never depends on guessing which tab to open. **P** publishes only after confirmation. **R** refreshes metadata after edits from another process. The terminal panel opens immediately; resource discovery and the full byte comparison run in the background. Rows become usable before that comparison finishes, and the header says **Checking publication…** until a result is known. It then marks unpublished changes or an unknown comparison instead of claiming the live session changed. Closing or switching cancels the read-only work. External local packages are references, not tracked historical copies.
 - **Models** edits Pi's **global** model configuration, not the staging preset. It has its own footer (`A add provider · R reload file`), does not publish, and applies only after `/reload` or a restart. See [Models and providers](#models-and-providers-global-not-published).
 - **More** groups prompt templates, themes, preset management/default selection, package import, update-all, restore, logs, network proxy, copy/delete, manager-only publication, and help.
 - RPC clients receive the same flat resource list with explicit category/action dialogs; terminal-only shortcuts are not required. The first list waits only for resource metadata, not the full byte comparison. Because RPC cannot patch an open dialog, a completed check appears in the next dialog.

@@ -164,9 +164,12 @@ export async function dashboard(ctx: ExtensionCommandContext, model: DashboardMo
       const presetKey = state.tab === 'models' ? [] : ['S preset'];
       const modelsPage = state.tab === 'models' && state.modelPage !== 'root';
       const closeKey = modelsPage ? 'Esc back' : 'Esc close';
+      // A prompts for a package source on Packages and opens a chooser
+      // elsewhere, so the footer names what A actually does on this tab.
+      const addKey = state.tab === 'packages' ? 'A add package' : 'A add…';
       const panel = state.tab === 'models'
         ? [state.modelPage === 'models' ? 'A add model' : 'A add provider', 'R reload file']
-        : model.busy || model.error ? [] : ['A add', 'P publish'];
+        : model.busy || model.error ? [] : [addKey, 'P publish'];
       const rowKeys = !row ? [] : state.tab === 'models'
         ? ['Enter open', row.editable ? 'E edit' : '']
         : state.tab === 'packages'

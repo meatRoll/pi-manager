@@ -120,41 +120,65 @@ export async function openManager(ctx, loaded) {
             });
         }
     };
-    const add = async (profile, tab) => {
-        if (tab === 'models')
+    const addPackage = async (profile) => {
+        const source = await ctx.ui.input('Add package', 'npm:name@version, git:host/owner/repo, or a local path');
+        if (!source)
             return;
-        const kind = tab === 'all' || tab === 'more' ? await choose(ctx, 'Add to staging', ['extensions', 'skills', 'context', 'packages', 'prompts', 'themes'].map(value => ({ label: value, value }))) : tab;
-        if (!kind)
-            return;
-        if (kind === 'packages') {
-            const source = await ctx.ui.input('Add package', 'npm:name@version, git:host/owner/repo, or a local path');
-            if (!source)
-                return;
-            const target = resolveSourcePath(source, ctx.cwd);
-            await view(ctx, 'Package inspection', JSON.stringify(await working(ctx, 'Inspecting package…', () => inspectPackage(target)), null, 2));
-            await packageRun(profile, 'add', target);
-            return;
-        }
-        if (kind === 'context') {
-            const action = await choose(ctx, 'Add context', [{ label: '+ Create context', value: 'create' }, { label: 'Import Markdown copy', value: 'import' }]);
-            if (!action)
-                return;
-            if (action === 'create') {
-                const name = await ctx.ui.input('New context', 'Name without .md');
-                if (!name)
-                    return;
-                const text = await ctx.ui.editor(`Context: ${name}`, `# ${name}\n\n`);
-                if (text !== undefined)
-                    await mutate(async () => { await createContext(profile, name, text); notify(); });
-                return;
-            }
-        }
+        const target = resolveSourcePath(source, ctx.cwd);
+        await view(ctx, 'Package inspection', JSON.stringify(await working(ctx, 'Inspecting package…', () => inspectPackage(target)), null, 2));
+        await packageRun(profile, 'add', target);
+    };
+    const importCopy = async (profile, kind) => {
         const path = await ctx.ui.input('Import local resource copy', 'Path relative to the current project, or absolute');
         if (path)
             await mutate(async () => {
                 await importResource(profile, kind, resolveSourcePath(path.startsWith('~') ? path : resolve(ctx.cwd, path), ctx.cwd));
                 notify();
             });
+    };
+    const addContext = async (profile, action) => {
+        const choice = action ?? await choose(ctx, 'Add context', [{ label: '+ Create context', value: 'create' }, { label: 'Import Markdown copy', value: 'import' }]);
+        if (choice === 'create') {
+            const name = await ctx.ui.input('New context', 'Name without .md');
+            if (!name)
+                return;
+            const text = await ctx.ui.editor(`Context: ${name}`, `# ${name}\n\n`);
+            if (text !== undefined)
+                await mutate(async () => { await createContext(profile, name, text); notify(); });
+        }
+        else if (choice === 'import')
+            await importCopy(profile, 'context');
+    };
+    const add = async (profile, tab) => {
+        if (tab === 'models')
+            return;
+        // Each tab used to jump straight to its single add action, so A on a
+        // resource tab could only import files: packages were undiscoverable.
+        if (tab === 'all' || tab === 'more') {
+            const kind = await choose(ctx, 'Add to staging', ['extensions', 'skills', 'context', 'packages', 'prompts', 'themes'].map(value => ({ label: value, value })));
+            if (kind === 'packages')
+                return addPackage(profile);
+            if (kind === 'context')
+                return addContext(profile, undefined);
+            return kind ? importCopy(profile, kind) : undefined;
+        }
+        if (tab === 'packages')
+            return addPackage(profile);
+        if (tab === 'context') {
+            const action = await choose(ctx, 'Add context', [
+                { label: '+ Create context', value: 'create' }, { label: 'Import Markdown copy', value: 'import' }, { label: '+ Add package', value: 'packages' },
+            ]);
+            if (action === 'packages')
+                return addPackage(profile);
+            return action ? addContext(profile, action) : undefined;
+        }
+        const kind = await choose(ctx, 'Add to staging', [
+            { label: `+ Import local copy (${tab})`, value: tab }, { label: '+ Add package', value: 'packages' },
+        ]);
+        if (kind === 'packages')
+            return addPackage(profile);
+        if (kind)
+            return importCopy(profile, kind);
     };
     const versionsPage = async (profile) => {
         const versions = await packageVersions(profile);

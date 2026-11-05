@@ -99,6 +99,19 @@ test('Pi editor context and publish are usable in the same session; native/globa
   assert.match(next.notes.join('\n'), /Restart Pi/);
 });
 
+test('/manager offers the package entry point from resource tabs instead of only a local-copy import', async () => {
+  await core.createProfile('addmenu');
+  const h = harness(); extension(h.pi);
+  // No menu selection queued: the chooser closes without touching staging.
+  h.selections.push('Switch preset', 'addmenu', 'Tab: Skills', '+ Add resource / package');
+  await h.run();
+  const menu = h.dialogs.find(dialog => dialog.title === 'Add to staging');
+  assert.ok(menu, h.titles.join(', '));
+  assert.ok(menu.options.some(option => option.includes('Import local copy (skills)')), menu.options.join(', '));
+  assert.ok(menu.options.some(option => option.includes('Add package')), menu.options.join(', '));
+  assert.deepEqual((await core.getSettings('addmenu')).packages, []);
+});
+
 test('/manager explicitly confirms package import and reports external references and unchanged source settings', async () => {
   const source = join(temp, 'source-agent'); const local = join(source, 'local-package');
   await mkdir(local, { recursive: true });

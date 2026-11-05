@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.7.5 — A adds packages from every tab
+
+Pressing **A** on Extensions, Skills, Prompt templates or Themes jumped straight
+to **Import local resource copy**, and **Packages** was the only tab that asked
+for a package source, so adding a package looked impossible from anywhere else.
+Those tabs now offer `+ Import local copy (…)` next to `+ Add package`; the
+**Context** tab adds `+ Add package` to its existing create/import menu; and
+**Packages** still prompts directly. The footer names what **A** does on the
+current tab (`A add package`, otherwise `A add…`) instead of a generic `A add`.
+
 ## v1.7.4 — Fetched-model checklists open on a selectable row
 
 The fetch checklist now starts on the first model that can still be added. If
@@ -255,6 +265,15 @@ The first stable release of **pi-manager**, a resource manager that runs inside 
 - 82 automated tests covering the dashboard, cancellation, migration, source-aware labels, publication, package recovery, isolation, and real Pi integration without model calls.
 
 ## 简体中文
+
+### v1.7.5 — 每个页签按 A 都能加包
+
+在 Extensions、Skills、Prompt templates、Themes 按 **A** 会直接跳到 **Import local
+resource copy**，而询问包来源的入口只存在于 **Packages** 页签，因此在其他页签装包
+看起来根本不可能。现在这些页签会同时给出 `+ Import local copy (…)` 与 `+ Add
+package`；**Context** 页签在原有的新建/导入菜单里多了 `+ Add package`；**Packages**
+仍直接询问来源。页脚也会按当前页签说明 **A** 的作用（`A add package`，其余为
+`A add…`），不再笼统显示 `A add`。
 
 ### v1.7.4 — 拉取模型的清单从可选行开始
 

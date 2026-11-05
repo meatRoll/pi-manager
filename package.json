@@ -1,6 +1,6 @@
 {
   "name": "pi-manager",
-  "version": "1.7.4",
+  "version": "1.7.5",
   "description": "An in-Pi extension for managing packages, skills, extensions, prompts, themes, and context presets.",
   "pi": {
     "extensions": [

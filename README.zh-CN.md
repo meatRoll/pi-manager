@@ -2,7 +2,7 @@
 
 [English](README.md) | **简体中文**
 
-**v1.7.4 — 在 Models 分类或 CLI 中统一管理 Pi 的供应商、模型、默认项和 enabledModels。** [版本说明](CHANGELOG.md#简体中文) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
+**v1.7.5 — 任意页签按 A 都能添加 npm/Git 包，不再局限于 Packages 页签。** [版本说明](CHANGELOG.md#简体中文) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
 
 一个**在 Pi 里面使用的扩展**，管理插件包、Skills、Extensions、提示词模板、主题、预置 Markdown 上下文，以及 Pi 的全局模型配置。
 
@@ -129,7 +129,7 @@ Unpublished changes · P publish for next start
 [x] pptx-preview                           skills · standalone · owned
 [x] APPEND_SYSTEM                          context · standalone · owned
 
-Space toggle · Enter preview · E edit · A add · P publish
+Space toggle · Enter preview · E edit · A add… · P publish
 ←→ / Tab category · S switch preset · / search · Esc close
 ```
 
@@ -137,7 +137,7 @@ Space toggle · Enter preview · E edit · A add · P publish
 
 - **空格**直接启停所选资源/包，只改暂存。**Enter**直接预览资源，选中包则打开操作菜单。**E** 编辑管理器副本；**Del** 确认后删除副本。外部/包内原文件仍只读。
 - **←→** 或 **Tab / Shift+Tab** 在同一页切换分类。**/** 搜索（Enter 结束输入，再按一次打开）；每个分类在预览、编辑、启停后保留选中项和搜索条件。**Esc** 先清空搜索，再退出。预览支持 `↑↓`、`PgUp` / `PgDn`。
-- **A** 向当前分类添加；**P** 确认后发布。其他进程修改后按 **R** 刷新。终端面板先显示，资源发现与完整内容比较放在后台；资源列表先可操作，检查结束前标题显示 **Checking publication…**，之后再提示未发布修改或无法确定的状态，不冒充当前会话已生效。关闭或切换会取消只读检查。本地外部包只是引用，不追踪历史副本。
+- **A** 向当前分类添加：资源页签同时给出 `+ Import local copy (…)` 与 `+ Add package`，**Packages** 页签直接询问包来源，装包不再靠猜页签；**P** 确认后发布。其他进程修改后按 **R** 刷新。终端面板先显示，资源发现与完整内容比较放在后台；资源列表先可操作，检查结束前标题显示 **Checking publication…**，之后再提示未发布修改或无法确定的状态，不冒充当前会话已生效。关闭或切换会取消只读检查。本地外部包只是引用，不追踪历史副本。
 - **Models** 编辑 Pi 的**全局**模型配置，不属于暂存预设；底部快捷键为 `A 添加供应商 · R 重新读取文件`，不参与发布，执行 `/reload` 或重启 Pi 后才生效。详见[模型与供应商](#模型与供应商全局不随预设发布)。
 - **More** 收拢模板、主题、预设管理/默认项、包导入、全部更新、恢复、日志、网络代理、复制/删除、manager-only 发布及说明。
 - RPC 客户端使用同样的扁平资源列表，通过明确的分类/操作对话框交互，不依赖终端快捷键。首个列表只等资源 metadata，不再等待完整内容比较；RPC 无法修改已经打开的对话框，检查结果会在下次对话框中显示。
