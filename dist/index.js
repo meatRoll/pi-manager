@@ -17,6 +17,7 @@ import { runModelsCommand } from './model-cli.js';
 import { DEFAULT_SNAPSHOT_RETENTION, prunePublishedSnapshots } from './bundle.js';
 import { runAdd, runPublish } from './cli-add.js';
 import { doctor, doctorText, DOCTOR_USAGE } from './doctor.js';
+import { runAdopt } from './adopt.js';
 const HELP = `pi-manager ${VERSION} — Pi resource manager extension
 
 Primary interface: type /manager INSIDE Pi. This CLI is optional/legacy.
@@ -29,6 +30,8 @@ Primary interface: type /manager INSIDE Pi. This CLI is optional/legacy.
   pi-manager publish [--profile <name>] [--dry-run] [--json]
                                                  Publish the active preset for the next Pi start
   pi-manager doctor [--profile <name>] [--json]  Read-only drift report; also More → Doctor inside /manager
+  pi-manager adopt [--profile <name>] [--json] --yes
+                                                 Stage packages Pi declares directly, preserve their filters, publish once
 
   pi-manager tui                                 Legacy standalone maintenance UI
   pi-manager profile list
@@ -167,6 +170,8 @@ export async function main(args) {
         return runAdd(args.slice(1));
     if (command === 'publish')
         return runPublish(args.slice(1));
+    if (command === 'adopt')
+        return runAdopt(args.slice(1));
     if (command === 'doctor')
         return runDoctor(args.slice(1));
     const rest = raw.filter(value => value !== '--yes' && value !== '--json');

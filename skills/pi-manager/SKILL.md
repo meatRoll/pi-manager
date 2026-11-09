@@ -72,9 +72,17 @@ Common causes: nothing published, snapshot missing on disk, publication made for
 a different `PI_MANAGER_HOME`, a stale profile `.lock`, or packages declared in
 Pi settings outside the manager.
 
-If `doctor` reports `unmanaged-packages`, do not publish over them. Offer the
-migration path described in the hint, and let the user decide before anything is
-removed: Pi loads both copies until the duplicates are gone.
+If `doctor` lists `unmanaged-packages`, those packages are declared directly in
+Pi's settings. Offer to adopt them instead of publishing over them:
+
+```bash
+node <package-root>/dist/index.js adopt --profile <preset> --yes --json
+```
+
+Adoption stages each source with the filters and disabled state the user already
+had, then publishes once, so the direct declaration is replaced in place. Never
+run `migrate` on a non-empty preset and never remove declarations the user did
+not ask to remove.
 
 ## Never do these
 

@@ -33,6 +33,7 @@ test('help, error exit codes, explicit destructive consent', async () => {
   assert.match(ok(['add', '--help']), /--publish/);
   assert.match(ok(['publish', '--help']), /pressing P/);
   assert.match(ok(['doctor', '--help']), /PI_MANAGER_HOME/);
+  assert.match(ok(['adopt', '--help']), /preserve their filters|keeps its filters/);
   assert.match(ok([]), /Primary interface/);
   assert.equal(command(['install']).status, 1);
   assert.equal(ok(['--version']).trim(), VERSION);
@@ -227,6 +228,47 @@ test('add stages and publishes headlessly without touching project config', sdk 
     finding.code === 'unmanaged-packages' && /npm:outside@1/.test(finding.message)));
 
   assert.equal(run(['add', source, '--profile', 'missing', '--yes']).status, 1);
+});
+
+test('adopt brings directly declared packages under a preset and keeps their filters', sdk ? {} : { skip: 'Installed Pi SDK required' }, async () => {
+  const agent = join(temp, 'adopt-agent');
+  await mkdir(agent, { recursive: true });
+  const source = join(temp, 'adopt-fixture');
+  await mkdir(join(source, 'skills', 'demo'), { recursive: true });
+  await writeFile(join(source, 'package.json'), JSON.stringify({ name: 'adopt-demo', version: '1.0.0', pi: { skills: ['./skills'] } }));
+  await writeFile(join(source, 'skills/demo/SKILL.md'), '---\nname: demo\ndescription: A demo\n---\n# Demo');
+  // Pi declares the package directly, with a filter the user chose by hand.
+  const direct = { source, skills: ['+skills/'] };
+  await writeFile(join(agent, 'settings.json'), JSON.stringify({ packages: [direct] }));
+  const adoptEnv = { ...env, PI_CODING_AGENT_DIR: agent, PI_MANAGER_SDK_PATH: sdk };
+  const run = (args: string[]) => spawnSync(process.execPath, [cli, ...args], { cwd: temp, env: adoptEnv, encoding: 'utf8', timeout: 60000 });
+  ok(['profile', 'create', 'adopted']);
+
+  assert.equal(run(['adopt', '--profile', 'adopted']).status, 1); // --yes is never implied
+  const before = JSON.parse(run(['doctor', '--profile', 'adopted', '--json']).stdout);
+  assert.equal(before.unmanaged.length, 1);
+  assert.equal(before.unmanaged[0].source, source);
+
+  const adopted = run(['adopt', '--profile', 'adopted', '--yes', '--json']);
+  assert.equal(adopted.status, 0, adopted.stderr);
+  const report = JSON.parse(adopted.stdout);
+  assert.equal(report.adopted.length, 1);
+  assert.equal(report.failed.length, 0);
+  assert.equal(report.published.declarations, 1);
+
+  // The direct declaration is replaced in place: same entry, filters intact.
+  const settings = JSON.parse(await readFile(join(agent, 'settings.json'), 'utf8'));
+  assert.equal(settings.packages.length, 1);
+  assert.deepEqual(settings.packages[0], direct);
+  const manifest = JSON.parse(await readFile(join(home, 'pi-package/package.json'), 'utf8'));
+  const declaration = manifest.piManager.declarations.find((item: { kind: string }) => item.kind === 'local');
+  assert.deepEqual(declaration.filters.skills, ['+skills/']);
+
+  const after = JSON.parse(run(['doctor', '--profile', 'adopted', '--json']).stdout);
+  assert.equal(after.unmanaged.length, 0);
+  assert.ok(after.findings.some((finding: { code: string }) => finding.code === 'declarations'));
+  const again = JSON.parse(run(['adopt', '--profile', 'adopted', '--yes', '--json']).stdout);
+  assert.equal(again.adopted.length, 0);
 });
 
 test('terminal strips control sequences from package/log content', () => {

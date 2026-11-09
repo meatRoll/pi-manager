@@ -234,6 +234,7 @@ node dist/index.js doctor --json
 - **`--dry-run`** 解析来源、与暂存预设和当前发布比较，不写任何东西，也不需要 `--yes`——因此可以先给出计划再跑安装脚本。
 - **`--json`** 输出单个对象：`{ok, profile, staged[], published|null, publishError?, requiresRestart}`。发布失败会保留已暂存的 generation，给出 `publishError` 并以非零退出；修好原因后重跑 `publish` 即可，不要重复 add。
 - **`publish`** 与 `/manager` 里按 **P** 是同一个切换动作。**`doctor`** 是只读的：报告发布漂移、绕过管理器直接写进 Pi 的包声明、快照缺失、残留的预设 `.lock`，以及 bundle 注册在另一个 `PI_MANAGER_HOME` 下。`/manager` 的 **More → Doctor** 展示同一份报告。
+- **`adopt`** 一步修正最常见的漂移：把 Pi 直接声明、但不在当前发布里的包逐个暂存进预设，保留用户原本的过滤器和禁用状态，最后发布一次。激活会按 identity 原地替换对应声明，因此不会重复加载。`/manager` 的 **More → Doctor** 里按 **A** 是同一动作，确认框会列出具体来源。
 - 这些命令都不会写项目 `.pi` 配置，也不会重启 Pi。回滚用 `package rollback <预设> --yes`。
 
 随包分发的 `skills/pi-manager` 会教会 agent 这套流程，并明确排除 `pi install`。Pi 会把它的 description 挂进系统提示，所以“装插件”这类请求无需额外提示就会路由到这里。
