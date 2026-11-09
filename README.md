@@ -31,6 +31,8 @@ Compiled `dist/` is committed, so a clone runs as-is and needs no build step (`n
 
 **This deliberately adds two package declarations to your Pi agent settings.** It does not copy or replace existing packages, credentials, sessions, models, or project files. The checkout is only needed to run the installer; registers already skip a manager declaration that exists (`PI_MANAGER_SELF_SOURCE=none` skips it entirely).
 
+The manager package also ships an agent-facing skill (`skills/pi-manager`, declared through `pi.skills`). Pi loads it with the package, so an agent asked to install a package learns to use `pi-manager add … --publish` instead of `pi install`. Remove the skill path from the package manifest or delete `skills/` if you do not want it advertised.
+
 Restart Pi in your working project:
 
 ```bash
@@ -235,6 +237,25 @@ A selected preset **adds managed resources to your normal Pi environment**. It d
 
 The extension does not call `/reload`, manipulate active runtime registries, or promise immediate unloading. Use a full restart after publishing, particularly for extension changes. Running `/reload` yourself uses Pi's native behavior and is not a transactional rollback.
 
+## Agents and scripts: install without the TUI
+
+`/manager` is the primary interface, but it needs an interactive, idle session. Automation uses the same staging → publish transaction headlessly:
+
+```bash
+node dist/index.js add npm:@scope/tool@1.2.0 --publish --yes --json
+node dist/index.js add git:github.com/owner/repo@v1 --profile mine --publish --yes --json
+node dist/index.js publish --profile mine --json
+node dist/index.js doctor --json
+```
+
+- **`add`** stages each source in the preset (explicit `--profile`, else the saved default, else the only preset) and, with `--publish`, activates the snapshot for the next Pi start. The resolved preset is always reported, so callers never guess.
+- **`--yes`** acknowledges third-party code and install scripts. It is required, and it never implies `--publish`.
+- **`--json`** prints one object: `{ok, profile, staged[], published|null, publishError?, requiresRestart}`. A publication failure keeps the staged generation, reports `publishError`, and exits non-zero; re-run `publish` after fixing the cause instead of adding again.
+- **`publish`** is the same cutover as **P** in `/manager`. **`doctor`** is read-only: it reports publication drift, package declarations written outside the manager, a missing snapshot, a leftover profile lock, and a bundle registered for a different `PI_MANAGER_HOME`.
+- Nothing here writes project `.pi` settings or restarts Pi. Roll back with `package rollback <preset> --yes`.
+
+The shipped `skills/pi-manager` skill teaches agents this workflow and explicitly excludes `pi install`. Pi advertises its description, so requests like “装插件” route here without extra prompting.
+
 ## Import existing Pi packages
 
 To bring the packages already declared in your personal Pi settings into the manager:
@@ -346,7 +367,7 @@ node dist/index.js package versions review
 node dist/index.js package rollback review --yes
 ```
 
-The old standalone UI is explicitly `node dist/index.js tui`. Running the CLI without arguments prints help rather than launching a separate TUI. Legacy `profile run` still launches an isolated Pi child; the `/manager` extension never uses it. Resource/package CLI changes also need publication from `/manager` before they affect the registered preset; `pi-manager models` writes the global model config directly and needs only `/reload` or a restart.
+The old standalone UI is explicitly `node dist/index.js tui`. Running the CLI without arguments prints help rather than launching a separate TUI. Legacy `profile run` still launches an isolated Pi child; the `/manager` extension never uses it. Resource/package CLI changes still need `pi-manager publish` (or **P** in `/manager`) before they affect the registered preset; `pi-manager add --publish` chains both. `pi-manager models` writes the global model config directly and needs only `/reload` or a restart.
 
 If you previously installed a global `pi-manager` command, it is optional. To update that maintenance command after building:
 
@@ -382,7 +403,7 @@ npm test
 
 Pi supplies `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui` at runtime. They are optional peers and development-only dependencies, **not bundled runtime copies**. Distribution archives include compiled files, both READMEs, and the changelog.
 
-Tests cover command registration, non-UI/busy/reentrant guards, flat dashboard shortcuts/search/selection/resize, publication-status comparisons, native dialog/editor flows, read-only package migration and failure cleanup, snapshot context binding, detached publication, failed publications, package digests/recovery, symlink protection, resource filters, global model config validation/conflicts/backups, model discovery, and the Models tab and CLI. Real Pi integration installs into a temporary agent directory and checks that `/manager`, exported extensions, prompts, and skills load and the command returns to the same session without a model call. npm lifecycle tests use an in-process loopback registry. No model API key is needed.
+Tests cover command registration, non-UI/busy/reentrant guards, flat dashboard shortcuts/search/selection/resize, publication-status comparisons, native dialog/editor flows, read-only package migration and failure cleanup, snapshot context binding, detached publication, failed publications, package digests/recovery, symlink protection, resource filters, global model config validation/conflicts/backups, model discovery, and the Models tab and CLI. The headless `add`/`publish`/`doctor` path is covered end to end against a temporary agent directory, including the project-settings sentinel. Real Pi integration installs into a temporary agent directory and checks that `/manager`, exported extensions, prompts, and skills load and the command returns to the same session without a model call. npm lifecycle tests use an in-process loopback registry. No model API key is needed.
 
 ## Out of scope
 

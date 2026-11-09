@@ -5,7 +5,7 @@ import { inventory, importResource, previewResource, writeResource, removeResour
 import { packageOperation, inspectPackage, togglePackage, packageVersions, rollbackPackages } from './packages.js';
 import { migratePiPackages, sourcePiAgentDir } from './migration.js';
 import { selfUpdate } from './self-update.js';
-import { publishBundle, publishedBundle, BUNDLE_DIR } from './bundle.js';
+import { publishForPi, publishedBundle, BUNDLE_DIR } from './bundle.js';
 import { choose, view, working } from './pi-ui.js';
 import { dashboard, newDashboardState } from './dashboard.js';
 import { createPublicationInspector } from './publication-status.js';
@@ -41,7 +41,7 @@ export async function openManager(ctx, loaded) {
         if (!await ctx.ui.confirm('Use on next Pi start?', 'Exports a detached snapshot and declares its packages as pinned Git/npm sources. Restart Pi to load it; current extensions and context are unchanged. External local packages remain references.'))
             return;
         await mutate(async () => {
-            const result = await working(ctx, 'Publishing package snapshot…', () => publishBundle(profile, { activate: true, agentDir: sourcePiAgentDir(), cwd: ctx.cwd }));
+            const result = await working(ctx, 'Publishing package snapshot…', () => publishForPi(profile, { cwd: ctx.cwd }));
             const declared = result.declarations?.length ?? 0;
             notify(`Published ${result.profile || 'manager only'} for next Pi start${declared ? ` · ${declared} package declaration${declared === 1 ? '' : 's'} applied` : ''}. Restart Pi, do not expect hot unloading. Package: ${BUNDLE_DIR}`);
         });

@@ -5,6 +5,9 @@
   "pi": {
     "extensions": [
       "./dist/extension.js"
+    ],
+    "skills": [
+      "./skills"
     ]
   },
   "peerDependencies": {
@@ -42,6 +45,7 @@
   },
   "files": [
     "dist",
+    "skills",
     "README.md",
     "README.zh-CN.md",
     "CHANGELOG.md"

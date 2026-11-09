@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased — agents can install packages without the TUI
+
+`/manager` was the only path that could stage *and* publish, and the CLI stopped
+after staging, so an agent asked to install a package had no reachable action
+and fell back to `pi install` — which bypasses snapshots, generations and
+rollback. Three additions close that gap.
+
+- **`pi-manager add <source>… [--profile <name>] [--publish] [--json] --yes`**
+  stages npm/Git/local sources in a preset and, with `--publish`, activates the
+  snapshot for the next start. Without `--profile` it uses the saved default
+  preset and always reports which preset it used. `--yes` acknowledges
+  third-party code only and never implies `--publish`.
+- **`pi-manager publish`** is the CLI form of **P**. A failed `add --publish`
+  keeps the staged generation, returns `publishError` and exits non-zero.
+- **`pi-manager doctor [--json]`** is a read-only drift report: publication
+  state, package declarations written outside the manager, a missing snapshot,
+  a leftover profile lock, and a bundle registered for another
+  `PI_MANAGER_HOME`.
+- The package now ships **`skills/pi-manager`** through `pi.skills`, so Pi
+  advertises it in every session. It routes "install a package / 装插件" to
+  `pi-manager add … --publish` and explicitly rules out `pi install`,
+  `pi remove` and hand-edited settings.
+
 ## v1.7.5 — A adds packages from every tab
 
 Pressing **A** on Extensions, Skills, Prompt templates or Themes jumped straight

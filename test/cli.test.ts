@@ -30,6 +30,9 @@ test('help, error exit codes, explicit destructive consent', async () => {
   const manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string };
   assert.equal(VERSION, manifest.version);
   assert.match(ok(['--help']), /INSIDE Pi/);
+  assert.match(ok(['add', '--help']), /--publish/);
+  assert.match(ok(['publish', '--help']), /pressing P/);
+  assert.match(ok(['doctor', '--help']), /PI_MANAGER_HOME/);
   assert.match(ok([]), /Primary interface/);
   assert.equal(command(['install']).status, 1);
   assert.equal(ok(['--version']).trim(), VERSION);
@@ -142,6 +145,67 @@ test('migrate CLI requires consent and imports into an empty staging profile wit
   assert.deepEqual(raw.packages, [join(temp, 'fixture')]);
   assert.ok(raw.piManagerPackages.active);
   assert.equal(command(['migrate', 'imported', source, '--yes']).status, 1);
+});
+
+test('add stages and publishes headlessly without touching project config', sdk ? {} : { skip: 'Installed Pi SDK required' }, async () => {
+  const agent = join(temp, 'add-agent');
+  const project = join(temp, 'add-project');
+  await mkdir(agent, { recursive: true });
+  await mkdir(join(project, '.pi'), { recursive: true });
+  const projectSettings = join(project, '.pi/settings.json');
+  const sentinel = '{"sentinel":"project-must-not-change","packages":[]}\n';
+  await writeFile(projectSettings, sentinel);
+  const source = join(temp, 'add-fixture');
+  await mkdir(join(source, 'skills', 'demo'), { recursive: true });
+  await writeFile(join(source, 'package.json'), JSON.stringify({ name: 'add-demo', version: '1.0.0', pi: { skills: ['./skills'] } }));
+  await writeFile(join(source, 'skills/demo/SKILL.md'), '---\nname: demo\ndescription: A demo\n---\n# Demo');
+  const addEnv = { ...env, PI_CODING_AGENT_DIR: agent, PI_MANAGER_SDK_PATH: sdk };
+  const run = (args: string[]) => spawnSync(process.execPath, [cli, ...args], { cwd: project, env: addEnv, encoding: 'utf8', timeout: 60000 });
+  ok(['profile', 'create', 'agentpreset']);
+  ok(['profile', 'use', 'agentpreset']);
+
+  assert.equal(run(['add', source]).status, 1); // --yes is never implied
+  assert.equal(run(['add', '--yes']).status, 1); // a source is required
+  const staged = run(['add', source, '--yes', '--json']);
+  assert.equal(staged.status, 0, staged.stderr);
+  const stagedReport = JSON.parse(staged.stdout);
+  assert.equal(stagedReport.ok, true);
+  assert.equal(stagedReport.profile, 'agentpreset');
+  assert.equal(stagedReport.published, null);
+  assert.ok(stagedReport.staged[0].generation);
+
+  const published = run(['add', source, '--publish', '--yes', '--json']);
+  assert.equal(published.status, 0, published.stderr);
+  const report = JSON.parse(published.stdout);
+  assert.equal(report.published.profile, 'agentpreset');
+  assert.equal(report.published.declarations, 1);
+  assert.equal(report.requiresRestart, true);
+  const manifest = JSON.parse(await readFile(join(home, 'pi-package/package.json'), 'utf8'));
+  assert.equal(manifest.piManager.id, report.published.snapshot);
+  assert.equal(manifest.piManager.profile, 'agentpreset');
+  assert.deepEqual(JSON.parse(await readFile(join(agent, 'settings.json'), 'utf8')).packages, [source]);
+  assert.equal(await readFile(projectSettings, 'utf8'), sentinel);
+
+  const doc = JSON.parse(run(['doctor', '--json']).stdout);
+  assert.equal(doc.ok, true);
+  assert.equal(doc.profile, 'agentpreset');
+  assert.equal(doc.publication, report.published.snapshot);
+  assert.ok(!doc.findings.some((finding: { level: string }) => finding.level === 'error'));
+  assert.match(run(['doctor']).stdout, /No blocking problems/);
+
+  const republish = run(['publish', '--json']);
+  assert.equal(republish.status, 0, republish.stderr);
+  assert.equal(JSON.parse(republish.stdout).profile, 'agentpreset');
+  assert.equal(await readFile(projectSettings, 'utf8'), sentinel);
+
+  // A declaration written outside the manager is drift, not a blocking failure.
+  await writeFile(join(agent, 'settings.json'), JSON.stringify({ packages: [source, 'npm:outside@1'] }));
+  const drift = JSON.parse(run(['doctor', '--json']).stdout);
+  assert.equal(drift.ok, true);
+  assert.ok(drift.findings.some((finding: { code: string; message: string }) =>
+    finding.code === 'unmanaged-packages' && /npm:outside@1/.test(finding.message)));
+
+  assert.equal(run(['add', source, '--profile', 'missing', '--yes']).status, 1);
 });
 
 test('terminal strips control sequences from package/log content', () => {

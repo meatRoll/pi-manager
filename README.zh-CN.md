@@ -31,6 +31,8 @@ node dist/index.js install --yes
 
 **这一步会在 Pi agent settings 中增加两个包声明。** 不复制或替换原有包、凭证、会话、模型和项目配置。源码目录只用于运行安装器，之后可以删除；已存在的管理器声明会被跳过（`PI_MANAGER_SELF_SOURCE=none` 可完全跳过）。
 
+管理器包同时通过 `pi.skills` 带一个面向 agent 的 skill（`skills/pi-manager`），随包一起被 Pi 加载。这样 agent 被要求安装包时会走 `pi-manager add … --publish`，而不是 `pi install`。不需要它时，从包清单里去掉 skill 路径或删除 `skills/` 即可。
+
 退出 Pi，在你的项目目录重新启动：
 
 ```bash
@@ -216,6 +218,25 @@ pi-manager models provider fetch local --add new --yes
 
 扩展不调用 `/reload`，不操作已加载的注册表，也不承诺立即卸载。发布后请完整重启，尤其是 extension 变化。你自行执行 `/reload` 属于 Pi 原生行为，不是管理器的事务恢复。
 
+## Agent 和脚本：不走 TUI 也能安装
+
+`/manager` 是主要入口，但它需要交互界面且 agent 空闲。自动化走同一套「暂存 → 发布」事务：
+
+```bash
+node dist/index.js add npm:@scope/tool@1.2.0 --publish --yes --json
+node dist/index.js add git:github.com/owner/repo@v1 --profile mine --publish --yes --json
+node dist/index.js publish --profile mine --json
+node dist/index.js doctor --json
+```
+
+- **`add`** 把每个来源暂存到预设（显式 `--profile`，否则用已保存的默认预设，再否则用唯一的预设）；带 `--publish` 时同时把快照激活给下一次 Pi 启动。结果里总会报告实际使用的预设，调用方不需要猜。
+- **`--yes`** 表示接受第三方代码和安装脚本，是必需的，但**绝不隐含** `--publish`。
+- **`--json`** 输出单个对象：`{ok, profile, staged[], published|null, publishError?, requiresRestart}`。发布失败会保留已暂存的 generation，给出 `publishError` 并以非零退出；修好原因后重跑 `publish` 即可，不要重复 add。
+- **`publish`** 与 `/manager` 里按 **P** 是同一个切换动作。**`doctor`** 是只读的：报告发布漂移、绕过管理器直接写进 Pi 的包声明、快照缺失、残留的预设 `.lock`，以及 bundle 注册在另一个 `PI_MANAGER_HOME` 下。
+- 这些命令都不会写项目 `.pi` 配置，也不会重启 Pi。回滚用 `package rollback <预设> --yes`。
+
+随包分发的 `skills/pi-manager` 会教会 agent 这套流程，并明确排除 `pi install`。Pi 会把它的 description 挂进系统提示，所以“装插件”这类请求无需额外提示就会路由到这里。
+
 ## 导入已有 Pi 包
 
 将个人 Pi settings 里已经声明、已经安装的包导入管理器：
@@ -327,7 +348,7 @@ node dist/index.js package versions review
 node dist/index.js package rollback review --yes
 ```
 
-旧独立 TUI 显式使用 `node dist/index.js tui`，CLI 不带参数改为显示帮助。旧 `profile run` 仍可启动隔离子进程，但 `/manager` 扩展不会调用它。资源/包的 CLI 修改同样需要回到 `/manager` 发布，才能影响注册的预设；`pi-manager models` 直接写全局模型配置，只需 `/reload` 或重启 Pi。
+旧独立 TUI 显式使用 `node dist/index.js tui`，CLI 不带参数改为显示帮助。旧 `profile run` 仍可启动隔离子进程，但 `/manager` 扩展不会调用它。资源/包的 CLI 修改仍需 `pi-manager publish`（或回到 `/manager` 按 **P**）才能影响注册的预设；`pi-manager add --publish` 把两步串起来。`pi-manager models` 直接写全局模型配置，只需 `/reload` 或重启 Pi。
 
 如果之前装过全局 `pi-manager`，它仅是可选维护命令，更新方式：
 
@@ -363,7 +384,7 @@ npm test
 
 `@earendil-works/pi-coding-agent`、`@earendil-works/pi-tui` 运行时由 Pi 提供，声明为可选 peer 和开发依赖，**不打包额外运行时副本**。分发包包含编译产物、两种 README 和版本说明。
 
-测试覆盖命令注册、无 UI/忙碌/重复打开防护、单页面板快捷键/搜索/选中项/缩放、发布状态比较、原生对话框/编辑器、只读包迁移和失败清理、启动快照上下文、独立发布和失败发布、版本摘要恢复、symlink 与资源过滤，以及全局模型配置的校验/冲突/备份、模型发现和 Models 分类/CLI。真实 Pi 集成在临时 agent 目录安装，检查 `/manager` 及导出的 extension、模板和 Skill 加载，并确认返回同一会话、不调用模型。真实 npm 测试使用 loopback registry，无需模型 API key。
+测试覆盖命令注册、无 UI/忙碌/重复打开防护、单页面板快捷键/搜索/选中项/缩放、发布状态比较、原生对话框/编辑器、只读包迁移和失败清理、启动快照上下文、独立发布和失败发布、版本摘要恢复、symlink 与资源过滤，以及全局模型配置的校验/冲突/备份、模型发现和 Models 分类/CLI。headless 的 `add`/`publish`/`doctor` 链路在临时 agent 目录上做端到端验证，并检查项目配置哨兵未被写入。真实 Pi 集成在临时 agent 目录安装，检查 `/manager` 及导出的 extension、模板和 Skill 加载，并确认返回同一会话、不调用模型。真实 npm 测试使用 loopback registry，无需模型 API key。
 
 ## 不做的功能
 
