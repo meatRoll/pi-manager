@@ -28,6 +28,32 @@ function identityOf(entry, baseDir) {
         return sourceIdentity(source);
     return sourceIdentity(resolve(baseDir, source));
 }
+/** Classify Pi's own declarations against a publication. Both the doctor report
+ * and `adopt` use this, so what is reported is exactly what gets adopted.
+ */
+export function comparePackages(installed, published, agentDir) {
+    const pinned = new Map((published?.declarations ?? []).map(item => [item.identity, item]));
+    const drift = { unmanaged: [], drifted: [] };
+    for (const entry of installed) {
+        if (isManagerOrBundle(entry, agentDir))
+            continue;
+        const source = sourceOf(entry);
+        if (looksLikeManager(source))
+            continue;
+        const identity = identityOf(entry, agentDir);
+        const expected = identity ? pinned.get(identity) : undefined;
+        if (expected) {
+            if (source !== expected.pinned)
+                drift.drifted.push({ source, pinned: expected.pinned });
+            continue;
+        }
+        drift.unmanaged.push({ source, entry, ...(identity ? { identity } : {}) });
+    }
+    return drift;
+}
+export async function unmanagedPackages(published, agentDir = piAgentDir()) {
+    return comparePackages(await agentPackages(agentDir), published, agentDir).unmanaged;
+}
 function activeProfile(profiles, requested) {
     if (requested) {
         return profiles.some(item => item.name === requested)
@@ -74,7 +100,7 @@ export function doctorText(report) {
 export async function doctor(input = {}) {
     const findings = [];
     const add = (level, code, message, hint) => findings.push({ level, code, message, ...(hint ? { hint } : {}) });
-    const report = { ok: false, managerHome: MANAGER_HOME, publishDir: PUBLISH_DIR, profile: null, publication: null, findings };
+    const report = { ok: false, managerHome: MANAGER_HOME, publishDir: PUBLISH_DIR, profile: null, publication: null, findings, unmanaged: [] };
     if (!existsSync(MANAGER_HOME)) {
         add('error', 'manager-home-missing', `No manager data at ${MANAGER_HOME}.`, 'Install it first: pi-manager install --yes');
         return report;
@@ -136,29 +162,16 @@ export async function doctor(input = {}) {
         declarations = published.declarations.map(item => ({ identity: item.identity, pinned: item.pinned, source: item.source }));
     }
     try {
-        const pinned = new Map(declarations.map(item => [item.identity, item]));
-        const unmanaged = [];
-        for (const entry of await agentPackages(agentDir)) {
-            if (isManagerOrBundle(entry, agentDir))
-                continue;
-            const source = sourceOf(entry);
-            if (looksLikeManager(source))
-                continue;
-            const identity = identityOf(entry, agentDir);
-            const expected = identity && pinned.get(identity);
-            if (expected) {
-                if (source !== expected.pinned) {
-                    add('warn', 'declaration-drift', `${source} is declared directly; the active publication pins ${expected.pinned}.`, 'The next publish rewrites it, but the running Pi already loaded the direct source.');
-                }
-                continue;
-            }
-            unmanaged.push(source);
+        const drift = comparePackages(await agentPackages(agentDir), published, agentDir);
+        report.unmanaged = drift.unmanaged;
+        for (const item of drift.drifted) {
+            add('warn', 'declaration-drift', `${item.source} is declared directly; the active publication pins ${item.pinned}.`, 'The next publish rewrites it, but the running Pi already loaded the direct source.');
         }
-        if (unmanaged.length) {
-            add('warn', 'unmanaged-packages', `Declared in Pi settings but not by the active publication: ${unmanaged.join(', ')}.`, `Bring them under the manager: pi-manager migrate ${active.profile ?? '<name>'} --yes, then publish. Remove them first if they are stale, so Pi does not load them twice.`);
+        if (drift.unmanaged.length) {
+            add('warn', 'unmanaged-packages', `Declared in Pi settings but not by the active publication: ${drift.unmanaged.map(item => item.source).join(', ')}.`, `Run: pi-manager adopt --profile ${active.profile ?? '<name>'} --yes, or press A on this report inside /manager.`);
         }
         else if (declarations.length) {
-            add('ok', 'declarations', `All ${declarations.length} published declaration${declarations.length === 1 ? '' : 's'} match Pi settings.`);
+            add('ok', 'declarations', `All ${declarations.length} published declaration${declarations.length === 1 ? ' matches' : 's match'} Pi settings.`);
         }
         if (!declarations.length && published)
             add('ok', 'declarations', 'No package declarations to reconcile.');

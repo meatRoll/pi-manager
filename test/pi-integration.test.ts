@@ -51,6 +51,12 @@ test('official install loads a snapshot into real Pi; /manager returns to that s
   assert.equal(resolvedPackages.length, 2);
   assert.ok(resolvedPackages.includes(await realpath(repo)), resolvedPackages.join(', '));
   assert.ok(resolvedPackages.some(item => item.includes('pi-package')));
+  // A package declared directly in Pi settings: doctor must offer to adopt it.
+  const foreign = join(temp, 'foreign');
+  await mkdir(join(foreign, 'skills', 'foreign'), { recursive: true });
+  await writeFile(join(foreign, 'package.json'), JSON.stringify({ name: 'foreign', version: '1.0.0', pi: { skills: ['./skills'] } }));
+  await writeFile(join(foreign, 'skills/foreign/SKILL.md'), '---\nname: foreign\ndescription: Declared outside the manager\n---\n# Foreign');
+  await writeFile(join(agent, 'settings.json'), JSON.stringify({ packages: [...configured.packages, foreign] }));
   const child = spawn(cli, ['--mode', 'rpc', '--no-session', '--offline', '--no-approve'], { cwd: project, env, stdio: ['pipe', 'pipe', 'pipe'] });
   const records: RecordMessage[] = [];
   let buffered = '', stderr = '';
@@ -104,13 +110,20 @@ test('official install loads a snapshot into real Pi; /manager returns to that s
     send({ type: 'extension_ui_response', id: more.id, value: more.options!.find(option => option.includes('Doctor')) });
     const doctorView = await wait(record => record.type === 'extension_ui_request' && record.method === 'select');
     assert.match(doctorView.title!, /pi-manager doctor/);
-    assert.match(doctorView.title!, /preset/);
-    send({ type: 'extension_ui_response', id: doctorView.id, value: 'Back' });
-    const afterDoctor = await wait(record => record.type === 'extension_ui_request' && record.method === 'select');
-    assert.match(afterDoctor.title!, /\/ More/);
-    send({ type: 'extension_ui_response', id: afterDoctor.id, cancelled: true });
+    assert.match(doctorView.title!, /unmanaged/);
+    send({ type: 'extension_ui_response', id: doctorView.id, value: doctorView.options!.find(option => /Adopt/.test(option)) });
+    const confirm = await wait(record => record.type === 'extension_ui_request' && record.method === 'confirm');
+    assert.match(confirm.title!, /Adopt 1 package into preset/);
+    send({ type: 'extension_ui_response', id: confirm.id, confirmed: true });
+    const afterAdopt = await wait(record => record.type === 'extension_ui_request' && record.method === 'select');
+    assert.match(afterAdopt.title!, /\/ More/);
+    send({ type: 'extension_ui_response', id: afterAdopt.id, cancelled: true });
     const response = await wait(record => record.id === 'manager');
     assert.equal(response.success, true); assert.equal(response.data?.disposition, 'handled');
+    // Adoption replaced the direct declaration in place: one entry, same source.
+    const adopted = JSON.parse(await readFile(join(agent, 'settings.json'), 'utf8')) as { packages: string[] };
+    assert.equal(adopted.packages.filter(item => typeof item === 'string' && item === foreign).length, 1);
+    assert.equal(adopted.packages.length, 3);
     send({ id: 'state', type: 'get_state' });
     assert.equal((await wait(record => record.id === 'state')).data?.messageCount, 0);
     child.stdin.end();

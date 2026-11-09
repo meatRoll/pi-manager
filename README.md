@@ -253,6 +253,7 @@ node dist/index.js doctor --json
 - **`--dry-run`** resolves the sources, compares them with the staged preset and the active publication, and writes nothing. It needs no `--yes`, so a plan can be shown before install scripts run.
 - **`--json`** prints one object: `{ok, profile, staged[], published|null, publishError?, requiresRestart}`. A publication failure keeps the staged generation, reports `publishError`, and exits non-zero; re-run `publish` after fixing the cause instead of adding again.
 - **`publish`** is the same cutover as **P** in `/manager`. **`doctor`** is read-only: it reports publication drift, package declarations written outside the manager, a missing snapshot, a leftover profile lock, and a bundle registered for a different `PI_MANAGER_HOME`. The same report is in **More → Doctor**.
+- **`adopt`** fixes the common drift in one step: it stages every package Pi declares outside the active publication, keeps the filters and disabled state the user already had, and publishes once. Activation replaces the matching declaration in place, so nothing loads twice. The same action is **A** on **More → Doctor**, with a confirmation listing the exact sources.
 - Nothing here writes project `.pi` settings or restarts Pi. Roll back with `package rollback <preset> --yes`.
 
 The shipped `skills/pi-manager` skill teaches agents this workflow and explicitly excludes `pi install`. Pi advertises its description, so requests like “装插件” route here without extra prompting.

@@ -9,6 +9,7 @@ import { selfUpdate } from './self-update.js';
 import { publishForPi, publishedBundle, BUNDLE_DIR } from './bundle.js';
 import type { LoadedBundle } from './bundle.js';
 import { doctor, doctorText } from './doctor.js';
+import { adoptUnmanaged } from './adopt.js';
 import { choose, view, working } from './pi-ui.js';
 import { dashboard, newDashboardState } from './dashboard.js';
 import type { DashboardEntry, DashboardModel, DashboardTab } from './dashboard.js';
@@ -167,12 +168,29 @@ export async function openManager(ctx: ExtensionCommandContext, loaded?: LoadedB
     const file = await choose(ctx, 'Package logs — review before sharing', files.map(value => ({ label: value, value })));
     if (file) await view(ctx, file, await readFile(join(profilePath(profile), '.operations', file), 'utf8'));
   };
-  const doctorPage = async () => {
-    // Read-only: no lock, no publication, no confirmation. Warnings stay
-    // advisory here; only blocking errors say the next start will not load.
-    const report = await working(ctx, 'Checking manager → Pi drift…', () => doctor(), false);
+  const doctorPage = async (profile: string) => {
+    // Read-only until the user explicitly adopts: no lock, no publication.
+    const report = await working(ctx, 'Checking manager → Pi drift…', () => doctor({ profile }), false);
     const title = report.ok ? 'pi-manager doctor — no blocking problems' : 'pi-manager doctor — fix before the next start';
-    await view(ctx, title, doctorText(report));
+    const choice = await view(ctx, title, doctorText(report), report.unmanaged.length
+      ? { key: 'a', label: `Adopt ${report.unmanaged.length} unmanaged`, value: 'adopt' }
+      : undefined);
+    if (choice !== 'adopt') return;
+    const sources = report.unmanaged.map(item => item.source);
+    if (!await ctx.ui.confirm(
+      `Adopt ${sources.length} package${sources.length === 1 ? '' : 's'} into ${profile}?`,
+      `${sources.join('\n')}\n\nStages them in this preset, keeps their filters, then publishes a snapshot whose declarations replace the direct ones. Third-party code and install scripts run with your permissions. Nothing restarts or hot-reloads.`,
+    )) return;
+    await mutate(async () => {
+      const result = await working(ctx, 'Adopting unmanaged packages…', () => adoptUnmanaged(profile, report.unmanaged));
+      ctx.ui.notify([
+        ...(result.adopted.length ? [`Adopted ${result.adopted.length} package${result.adopted.length === 1 ? '' : 's'} into ${profile}.`] : []),
+        ...result.failed.map(item => `Failed ${item.source}: ${item.error}`),
+        ...(result.published ? [`Published ${result.published.snapshot} for next start · ${result.published.declarations} declaration${result.published.declarations === 1 ? '' : 's'} applied.`] : []),
+        ...(result.publishError ? [`Staged but not published: ${result.publishError}`] : []),
+        result.ok ? 'Restart Pi to load it; this session is unchanged.' : 'Some packages stay directly declared; fix the errors and rerun doctor.',
+      ].join(' '), result.ok ? 'info' : 'warning');
+    });
   };
   const proxyPage = async () => {
     while (true) {
@@ -345,7 +363,7 @@ export async function openManager(ctx: ExtensionCommandContext, loaded?: LoadedB
       else if (action.id === 'profiles') { const selected = await pickProfile(); if (selected) { profile = selected; state = newDashboardState(); changed(); } }
       else if (action.id === 'versions') await versionsPage(profile!);
       else if (action.id === 'logs') await logsPage(profile!);
-      else if (action.id === 'doctor') await doctorPage();
+      else if (action.id === 'doctor') await doctorPage(profile!);
       else if (action.id === 'proxy') await proxyPage();
       else if (action.id === 'self-update') await guard(async () => {
         if (!await ctx.ui.confirm('Update pi-manager from GitHub?', 'Runs git pull --ff-only in the manager checkout, then republishes so the next Pi start still loads the same installation. Packages, resources and presets are not touched. Restart Pi afterwards.')) return;

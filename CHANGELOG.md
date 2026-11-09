@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased — unmanaged packages can be adopted in one step
+
+`doctor` could only report this drift: a package Pi declared directly was outside
+the preset, and the fix it suggested (`migrate`) requires an empty preset, so it
+never applied to the setups that actually hit the warning.
+
+- **`pi-manager adopt [--profile <name>] [--json] --yes`** stages each source Pi
+declares outside the active publication, keeps the filters and disabled state the
+user already had, and publishes once. Activation replaces the matching direct
+declaration in place, so nothing loads twice; a failed adoption leaves that
+declaration untouched.
+- The same action is **A** on **More → Doctor**, with a confirmation that lists
+the exact sources and explains that install scripts run with the user's
+permissions.
+- **`doctor --json`** now includes the structured `unmanaged` entries, so an
+agent can act on the report instead of scraping the finding text.
+
 ## v2.0.0 — agents can install packages without the TUI
 
 `/manager` was the only path that could stage *and* publish, and the CLI stopped
@@ -292,6 +309,20 @@ The first stable release of **pi-manager**, a resource manager that runs inside 
 - 82 automated tests covering the dashboard, cancellation, migration, source-aware labels, publication, package recovery, isolation, and real Pi integration without model calls.
 
 ## 简体中文
+
+### 未发布 — 不在管理器管辖下的包可以一步收编
+
+`doctor` 以前只能报告这种漂移：Pi 直接声明的包不在预设里；而它建议的修法
+（`migrate`）要求预设为空，所以恰恰对真正遇到该警告的配置不适用。
+
+- **`pi-manager adopt [--profile <name>] [--json] --yes`** 把 Pi 直接声明、但
+不在当前发布里的来源逐个暂存，保留用户原本的过滤器和禁用状态，最后发布一次。
+激活会按 identity 原地替换对应的直接声明，不会重复加载；某个包收编失败时，它的
+直接声明保持原样。
+- `/manager` 的 **More → Doctor** 里按 **A** 是同一动作，确认框会列出具体来源，
+并说明安装脚本以用户权限运行。
+- **`doctor --json`** 现在包含结构化的 `unmanaged` 条目，agent 可以直接据其行动，
+不再需要解析提示文本。
 
 ### v2.0.0 — agent 不必打开 TUI 也能装包
 
