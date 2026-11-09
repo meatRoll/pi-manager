@@ -2,7 +2,7 @@
 
 [English](README.md) | **简体中文**
 
-**v2.0.0 — 不开 TUI 也能装包：add/publish/doctor，外加把 agent 从 `pi install` 引导过来的 skill。** [版本说明](CHANGELOG.md#简体中文) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
+**v2.1.0 — 一步收编 Pi 直接声明、不在发布范围内的包：More → Doctor 或 CLI。** [版本说明](CHANGELOG.md#简体中文) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
 
 一个**在 Pi 里面使用的扩展**，管理插件包、Skills、Extensions、提示词模板、主题、预置 Markdown 上下文，以及 Pi 的全局模型配置。
 

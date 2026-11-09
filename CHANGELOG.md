@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — unmanaged packages can be adopted in one step
+## v2.1.0 — unmanaged packages can be adopted in one step
 
 `doctor` could only report this drift: a package Pi declared directly was outside
 the preset, and the fix it suggested (`migrate`) requires an empty preset, so it
@@ -310,7 +310,7 @@ The first stable release of **pi-manager**, a resource manager that runs inside 
 
 ## 简体中文
 
-### 未发布 — 不在管理器管辖下的包可以一步收编
+### v2.1.0 — 不在管理器管辖下的包可以一步收编
 
 `doctor` 以前只能报告这种漂移：Pi 直接声明的包不在预设里；而它建议的修法
 （`migrate`）要求预设为空，所以恰恰对真正遇到该警告的配置不适用。
