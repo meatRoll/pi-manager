@@ -80,6 +80,9 @@ test('official install loads a snapshot into real Pi; /manager returns to that s
     const names = commands.data?.commands?.map(command => command.name) || [];
     assert.ok(names.includes('manager')); assert.ok(names.includes('snapshot-example'));
     assert.ok(names.includes('example')); assert.ok(names.includes('skill:example'));
+    // The manager package declares skills/pi-manager through pi.skills, so real
+    // Pi must advertise the routing skill without any installer copying files.
+    assert.ok(names.includes('skill:pi-manager'), names.join(', '));
     send({ id: 'manager', type: 'prompt', message: '/manager' });
     const dialog = await wait(record => record.type === 'extension_ui_request' && record.method === 'select');
     assert.match(dialog.title!, /^pi-manager \/ preset \/ All/);
