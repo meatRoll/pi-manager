@@ -1,10 +1,12 @@
-import { getState, assertProfile, listProfiles } from './storage.js';
-import { packageOperation } from './packages.js';
-import { publishForPi } from './bundle.js';
+import { getSettings, getState, assertProfile, listProfiles, profilePath } from './storage.js';
+import { packageEntries, resolveSourcePath } from './core.js';
+import { packageOperation, inspectPackage } from './packages.js';
+import { publishForPi, publishedBundle } from './bundle.js';
+import { isGitSource, planDeclarations, sourceIdentity } from './declarations.js';
 import { errorMessage } from './errors.js';
 import { plain } from './terminal.js';
 const PROFILE_FLAG = '--profile';
-export const ADD_USAGE = `pi-manager add <source>... [--profile <name>] [--publish] [--json] --yes
+export const ADD_USAGE = `pi-manager add <source>... [--profile <name>] [--publish] [--dry-run] [--json] --yes
 
 Stages each source in a preset and, with --publish, activates the snapshot for
 the next Pi start. The running session keeps its current resources.
@@ -12,17 +14,19 @@ the next Pi start. The running session keeps its current resources.
   <source>   npm:name@version, git:host/owner/repo@ref, or a local path
   --profile  preset to stage into; default: saved default preset, else the only one
   --publish  publish and activate the snapshot (never implied by --yes)
+  --dry-run  report what would happen; nothing is staged, published or written
   --json     one JSON object: {ok, profile, staged[], published, publishError?}
-  --yes      acknowledge third-party code and install scripts (required)
+  --yes      acknowledge third-party code and install scripts (required unless --dry-run)
 
 Project .pi settings are never written and Pi is never restarted.`;
-export const PUBLISH_USAGE = `pi-manager publish [--profile <name>] [--json]
+export const PUBLISH_USAGE = `pi-manager publish [--profile <name>] [--dry-run] [--json]
 
 Publishes the active preset and activates it for the next Pi start: the same
-transaction as pressing P in /manager.`;
+transaction as pressing P in /manager. --dry-run compares the staged preset with
+the active publication and writes nothing.`;
 export function parseAddOptions(args) {
     const sources = [];
-    const options = { sources, publish: false, json: false, yes: false };
+    const options = { sources, publish: false, dryRun: false, json: false, yes: false };
     for (let index = 0; index < args.length; index += 1) {
         const arg = args[index];
         if (arg === '--yes') {
@@ -35,6 +39,10 @@ export function parseAddOptions(args) {
         }
         if (arg === '--publish') {
             options.publish = true;
+            continue;
+        }
+        if (arg === '--dry-run') {
+            options.dryRun = true;
             continue;
         }
         const inline = arg.startsWith(`${PROFILE_FLAG}=`) ? arg.slice(PROFILE_FLAG.length + 1) : undefined;
@@ -95,9 +103,64 @@ function reportLines(report) {
     }
     return lines.join('\n');
 }
+function dryRunLines(report) {
+    const lines = ['Dry run — nothing was staged, published or written.', `Preset: ${report.profile}`];
+    for (const item of report.planned) {
+        const facts = [item.kind, item.version].filter(Boolean).join(' ');
+        lines.push(`  ${item.action.padEnd(6)} ${item.source}  · ${facts}${item.name ? ` (${item.name})` : ''}${item.notice ? ` — ${item.notice}` : ''}`);
+    }
+    if (report.publish) {
+        lines.push(`Would publish preset ${report.profile} after staging. Current publication: ${report.publish.currentSnapshot ?? '(none)'}${report.publish.currentProfile ? ` (${report.publish.currentProfile})` : ''}.`);
+    }
+    else {
+        lines.push('Staging only; pass --publish to also activate the next Pi start.');
+    }
+    return lines.join('\n');
+}
+/** Read-only preview: resolve each source, compare it with the staged preset and
+ * describe the publication without touching staging, the publication or Pi.
+ */
+async function reportDryRun(profile, options) {
+    const staged = new Set(packageEntries(await getSettings(profile), profilePath(profile))
+        .map(item => sourceIdentity(item.identity) ?? item.identity));
+    const planned = [];
+    for (const source of options.sources) {
+        const target = resolveSourcePath(source);
+        const identity = sourceIdentity(target) ?? target;
+        const entry = {
+            source, identity, action: staged.has(identity) ? 'update' : 'add',
+            kind: target.startsWith('npm:') ? 'npm' : isGitSource(target) ? 'git' : 'local',
+        };
+        try {
+            const inspection = await inspectPackage(source);
+            const manifest = inspection.manifest;
+            if (typeof manifest?.name === 'string')
+                entry.name = manifest.name;
+            if (typeof manifest?.version === 'string')
+                entry.version = manifest.version;
+            if (inspection.notice)
+                entry.notice = inspection.notice;
+        }
+        catch (error) {
+            entry.notice = `Metadata unavailable: ${errorMessage(error)}`;
+        }
+        planned.push(entry);
+    }
+    const published = options.publish ? await publishedBundle().catch(() => null) : null;
+    const report = {
+        ok: true, dryRun: true, profile, planned,
+        publish: options.publish
+            ? { wouldPublish: true, currentSnapshot: published?.id ?? null, currentProfile: published?.profile ?? null }
+            : null,
+    };
+    if (options.json)
+        emitJson(report);
+    else
+        process.stdout.write(`${dryRunLines(report)}\n`);
+}
 /** Stage one or more sources, optionally publish, and report the resulting
  * generation and snapshot. `--yes` acknowledges third-party code only; it never
- * implies --publish.
+ * implies --publish, and --dry-run needs no acknowledgement at all.
  */
 export async function runAdd(args) {
     if (args.includes('--help') || args.includes('-h')) {
@@ -117,6 +180,8 @@ export async function runAdd(args) {
         }
         throw error;
     }
+    if (options.dryRun)
+        return reportDryRun(await resolveActiveProfile(options.profile), options);
     if (!options.yes)
         throw new Error('Pass --yes to acknowledge third-party package code and install scripts. Staging alone still executes install scripts.');
     const profile = await resolveActiveProfile(options.profile);
@@ -154,10 +219,11 @@ export async function runPublish(args) {
         return;
     }
     const json = args.includes('--json');
+    const dryRun = args.includes('--dry-run');
     let profile;
     for (let index = 0; index < args.length; index += 1) {
         const arg = args[index];
-        if (arg === '--json')
+        if (arg === '--json' || arg === '--dry-run')
             continue;
         const inline = arg.startsWith(`${PROFILE_FLAG}=`) ? arg.slice(PROFILE_FLAG.length + 1) : undefined;
         if (arg === PROFILE_FLAG || inline !== undefined) {
@@ -169,6 +235,33 @@ export async function runPublish(args) {
         throw new Error(`Unknown publish option: ${arg}. See --help.`);
     }
     const active = await resolveActiveProfile(profile);
+    if (dryRun) {
+        const planned = await planDeclarations(active);
+        const published = await publishedBundle();
+        const before = new Set((published?.declarations ?? []).map(item => item.identity));
+        const after = new Set(planned.declarations.map(item => item.identity));
+        const preview = {
+            ok: true, dryRun: true, profile: active, currentSnapshot: published?.id ?? null,
+            declarations: {
+                total: after.size,
+                added: [...after].filter(identity => !before.has(identity)),
+                removed: [...before].filter(identity => !after.has(identity)),
+                skipped: planned.skipped,
+            },
+        };
+        if (json)
+            emitJson(preview);
+        else
+            process.stdout.write(`${[
+                'Dry run — nothing published; the active snapshot and the running Pi are unchanged.',
+                `Preset: ${active} · current publication: ${preview.currentSnapshot ?? '(none)'}`,
+                `Declarations: ${preview.declarations.total} total · ${preview.declarations.added.length} added · ${preview.declarations.removed.length} removed`,
+                ...preview.declarations.added.map(identity => `  + ${identity}`),
+                ...preview.declarations.removed.map(identity => `  - ${identity}`),
+                ...preview.declarations.skipped.map(item => `  skipped ${item.source}: ${item.reason}`),
+            ].join('\n')}\n`);
+        return;
+    }
     const bundle = await publishForPi(active);
     const report = { ok: true, profile: active, snapshot: bundle.id, declarations: bundle.declarations?.length ?? 0, requiresRestart: true };
     if (json)

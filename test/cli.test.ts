@@ -166,6 +166,17 @@ test('add stages and publishes headlessly without touching project config', sdk 
 
   assert.equal(run(['add', source]).status, 1); // --yes is never implied
   assert.equal(run(['add', '--yes']).status, 1); // a source is required
+  const settingsPath = join(home, 'profiles/agentpreset/settings.json');
+  const stagingBefore = await readFile(settingsPath, 'utf8').catch(() => '');
+  const dry = run(['add', source, '--dry-run', '--json']);
+  assert.equal(dry.status, 0, dry.stderr);
+  const plan = JSON.parse(dry.stdout);
+  assert.equal(plan.dryRun, true);
+  assert.equal(plan.profile, 'agentpreset');
+  assert.equal(plan.planned[0].action, 'add');
+  assert.equal(plan.planned[0].kind, 'local');
+  assert.equal(plan.planned[0].version, '1.0.0');
+  assert.equal(await readFile(settingsPath, 'utf8').catch(() => ''), stagingBefore);
   const staged = run(['add', source, '--yes', '--json']);
   assert.equal(staged.status, 0, staged.stderr);
   const stagedReport = JSON.parse(staged.stdout);
@@ -197,6 +208,16 @@ test('add stages and publishes headlessly without touching project config', sdk 
   assert.equal(republish.status, 0, republish.stderr);
   assert.equal(JSON.parse(republish.stdout).profile, 'agentpreset');
   assert.equal(await readFile(projectSettings, 'utf8'), sentinel);
+
+  // Dry runs preview the same transaction and must not create a snapshot.
+  const snapshot = JSON.parse(await readFile(join(home, 'pi-package/package.json'), 'utf8')).piManager.id;
+  const preview = JSON.parse(run(['publish', '--dry-run', '--json']).stdout);
+  assert.equal(preview.dryRun, true);
+  assert.equal(preview.currentSnapshot, snapshot);
+  assert.equal(preview.declarations.total, 1);
+  assert.deepEqual(preview.declarations.added, []);
+  assert.equal(JSON.parse(await readFile(join(home, 'pi-package/package.json'), 'utf8')).piManager.id, snapshot);
+  assert.equal(JSON.parse(run(['add', source, '--dry-run', '--json']).stdout).planned[0].action, 'update');
 
   // A declaration written outside the manager is drift, not a blocking failure.
   await writeFile(join(agent, 'settings.json'), JSON.stringify({ packages: [source, 'npm:outside@1'] }));

@@ -27,10 +27,11 @@ Primary interface: type /manager INSIDE Pi. This CLI is optional/legacy.
   pi-manager self-update --yes                   git pull the manager checkout, republish, restart Pi
   pi-manager migrate <profile> [agent-dir] --yes  Copy installed Pi packages into an empty staging profile
 
-  pi-manager add <source>... [--profile <name>] [--publish] [--json] --yes
+  pi-manager add <source>... [--profile <name>] [--publish] [--dry-run] [--json] --yes
                                                  Stage packages; --publish activates the next-start snapshot
-  pi-manager publish [--profile <name>] [--json]  Publish the active preset for the next Pi start
-  pi-manager doctor [--profile <name>] [--json]  Read-only report: drift, duplicates, missing snapshot, busy locks
+  pi-manager publish [--profile <name>] [--dry-run] [--json]
+                                                 Publish the active preset for the next Pi start
+  pi-manager doctor [--profile <name>] [--json]  Read-only drift report; also More → Doctor inside /manager
 
   pi-manager tui                                 Legacy standalone maintenance UI
   pi-manager profile list

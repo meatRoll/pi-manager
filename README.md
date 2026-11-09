@@ -2,7 +2,7 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-**v1.7.5 — add npm/Git packages with A from every tab, not only Packages.** [Release notes](CHANGELOG.md) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
+**v2.0.0 — install packages headlessly with add/publish/doctor, and a shipped skill that routes agents away from `pi install`.** [Release notes](CHANGELOG.md) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
 
 A **Pi extension** for managing packages, skills, extensions, prompt templates, themes, preset Markdown context, and Pi's global model configuration **inside Pi**.
 
@@ -149,7 +149,7 @@ The footer is contextual: it lists only the keys that currently do something. `E
 - **←→** or **Tab / Shift+Tab** changes category on the same screen. **/** searches (Enter finishes searching; Enter again opens). Each category keeps its selection and search after preview, editing, or toggling. **Esc** clears search first, then closes. Preview supports `↑↓` and `PgUp` / `PgDn`.
 - **A** adds to the current category: a resource tab offers `+ Import local copy (… )` next to `+ Add package`, and **Packages** prompts for the source directly, so adding a package never depends on guessing which tab to open. **P** publishes only after confirmation. **R** refreshes metadata after edits from another process. The terminal panel opens immediately; resource discovery and the full byte comparison run in the background. Rows become usable before that comparison finishes, and the header says **Checking publication…** until a result is known. It then marks unpublished changes or an unknown comparison instead of claiming the live session changed. Closing or switching cancels the read-only work. External local packages are references, not tracked historical copies.
 - **Models** edits Pi's **global** model configuration, not the staging preset. It has its own footer (`A add provider · R reload file`), does not publish, and applies only after `/reload` or a restart. See [Models and providers](#models-and-providers-global-not-published).
-- **More** groups prompt templates, themes, preset management/default selection, package import, update-all, restore, logs, network proxy, copy/delete, manager-only publication, and help.
+- **More** groups prompt templates, themes, preset management/default selection, package import, update-all, restore, logs, the read-only doctor report, network proxy, copy/delete, manager-only publication, and help.
 - RPC clients receive the same flat resource list with explicit category/action dialogs; terminal-only shortcuts are not required. The first list waits only for resource metadata, not the full byte comparison. Because RPC cannot patch an open dialog, a completed check appears in the next dialog.
 - Package extensions display as `package-label · src/index.ts`, so identical entry filenames are distinguishable. Git labels follow the **configured repository** (for example `meatRoll/pi-image-gen`), not a possibly inherited upstream manifest name; non-GitHub hosts stay visible. npm labels use the configured package name, including its scope. Local packages with their own Git checkout use its `origin` repository (read locally, with no network access); otherwise they use the manifest name or configured path. Parent repositories and inherited manifest repository URLs are not used. Package lists use the same labels; raw manifest names remain available in package details. Standalone filenames are unchanged. These are display labels only, not renamed files, sources, or resource IDs.
 - Package-origin rows include the installed package version, for example `extensions · package · 1.0.0 · read-only`, so a stale install is visible before launch. Local checkouts without a manifest version show `local`; standalone and context rows stay unversioned.
@@ -250,8 +250,9 @@ node dist/index.js doctor --json
 
 - **`add`** stages each source in the preset (explicit `--profile`, else the saved default, else the only preset) and, with `--publish`, activates the snapshot for the next Pi start. The resolved preset is always reported, so callers never guess.
 - **`--yes`** acknowledges third-party code and install scripts. It is required, and it never implies `--publish`.
+- **`--dry-run`** resolves the sources, compares them with the staged preset and the active publication, and writes nothing. It needs no `--yes`, so a plan can be shown before install scripts run.
 - **`--json`** prints one object: `{ok, profile, staged[], published|null, publishError?, requiresRestart}`. A publication failure keeps the staged generation, reports `publishError`, and exits non-zero; re-run `publish` after fixing the cause instead of adding again.
-- **`publish`** is the same cutover as **P** in `/manager`. **`doctor`** is read-only: it reports publication drift, package declarations written outside the manager, a missing snapshot, a leftover profile lock, and a bundle registered for a different `PI_MANAGER_HOME`.
+- **`publish`** is the same cutover as **P** in `/manager`. **`doctor`** is read-only: it reports publication drift, package declarations written outside the manager, a missing snapshot, a leftover profile lock, and a bundle registered for a different `PI_MANAGER_HOME`. The same report is in **More → Doctor**.
 - Nothing here writes project `.pi` settings or restarts Pi. Roll back with `package rollback <preset> --yes`.
 
 The shipped `skills/pi-manager` skill teaches agents this workflow and explicitly excludes `pi install`. Pi advertises its description, so requests like “装插件” route here without extra prompting.

@@ -6,6 +6,7 @@ import { packageOperation, inspectPackage, togglePackage, packageVersions, rollb
 import { migratePiPackages, sourcePiAgentDir } from './migration.js';
 import { selfUpdate } from './self-update.js';
 import { publishForPi, publishedBundle, BUNDLE_DIR } from './bundle.js';
+import { doctor, doctorText } from './doctor.js';
 import { choose, view, working } from './pi-ui.js';
 import { dashboard, newDashboardState } from './dashboard.js';
 import { createPublicationInspector } from './publication-status.js';
@@ -205,6 +206,13 @@ export async function openManager(ctx, loaded) {
         if (file)
             await view(ctx, file, await readFile(join(profilePath(profile), '.operations', file), 'utf8'));
     };
+    const doctorPage = async () => {
+        // Read-only: no lock, no publication, no confirmation. Warnings stay
+        // advisory here; only blocking errors say the next start will not load.
+        const report = await working(ctx, 'Checking manager → Pi drift…', () => doctor(), false);
+        const title = report.ok ? 'pi-manager doctor — no blocking problems' : 'pi-manager doctor — fix before the next start';
+        await view(ctx, title, doctorText(report));
+    };
     const proxyPage = async () => {
         while (true) {
             const current = await proxySummary();
@@ -283,6 +291,7 @@ export async function openManager(ctx, loaded) {
         { id: 'profiles', label: 'Manage / switch presets' },
         { id: 'migrate', label: 'Import packages from current Pi' }, { id: 'update', label: 'Update all packages' },
         { id: 'versions', label: 'Package generations / restore' }, { id: 'logs', label: 'Package operation logs' },
+        { id: 'doctor', label: 'Doctor: check publication and Pi drift' },
         { id: 'proxy', label: 'Network proxy settings…' },
         { id: 'self-update', label: 'Update pi-manager from GitHub (git pull)' },
         { id: 'copy', label: 'Copy profile' }, { id: 'default', label: 'Set as default manager preset' },
@@ -442,6 +451,8 @@ export async function openManager(ctx, loaded) {
                 await versionsPage(profile);
             else if (action.id === 'logs')
                 await logsPage(profile);
+            else if (action.id === 'doctor')
+                await doctorPage();
             else if (action.id === 'proxy')
                 await proxyPage();
             else if (action.id === 'self-update')

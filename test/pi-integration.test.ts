@@ -97,7 +97,18 @@ test('official install loads a snapshot into real Pi; /manager returns to that s
     send({ type: 'extension_ui_response', id: preview.id, value: 'Back' });
     const returned = await wait(record => record.type === 'extension_ui_request' && record.method === 'select');
     assert.match(returned.title!, /^pi-manager \/ preset \/ All/);
-    send({ type: 'extension_ui_response', id: returned.id, cancelled: true });
+    // More → Doctor runs the same read-only report as the CLI, inside the session.
+    send({ type: 'extension_ui_response', id: returned.id, value: returned.options!.find(option => option.endsWith('Tab: More')) });
+    const more = await wait(record => record.type === 'extension_ui_request' && record.method === 'select');
+    assert.match(more.title!, /\/ More/);
+    send({ type: 'extension_ui_response', id: more.id, value: more.options!.find(option => option.includes('Doctor')) });
+    const doctorView = await wait(record => record.type === 'extension_ui_request' && record.method === 'select');
+    assert.match(doctorView.title!, /pi-manager doctor/);
+    assert.match(doctorView.title!, /preset/);
+    send({ type: 'extension_ui_response', id: doctorView.id, value: 'Back' });
+    const afterDoctor = await wait(record => record.type === 'extension_ui_request' && record.method === 'select');
+    assert.match(afterDoctor.title!, /\/ More/);
+    send({ type: 'extension_ui_response', id: afterDoctor.id, cancelled: true });
     const response = await wait(record => record.id === 'manager');
     assert.equal(response.success, true); assert.equal(response.data?.disposition, 'handled');
     send({ id: 'state', type: 'get_state' });

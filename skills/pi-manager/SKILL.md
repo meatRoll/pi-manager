@@ -40,6 +40,12 @@ If the user only wants to inspect or prepare something, drop `--publish`. The
 package is then staged in the preset and nothing changes for Pi until someone
 publishes.
 
+To show a plan first, add `--dry-run` (no `--yes` needed, nothing is written):
+
+```bash
+node <package-root>/dist/index.js add <source> --publish --dry-run --json
+```
+
 ## Report the result
 
 Read the JSON instead of assuming success:
