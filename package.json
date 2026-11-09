@@ -1,10 +1,13 @@
 {
   "name": "pi-manager",
-  "version": "1.7.5",
+  "version": "2.0.0",
   "description": "An in-Pi extension for managing packages, skills, extensions, prompts, themes, and context presets.",
   "pi": {
     "extensions": [
       "./dist/extension.js"
+    ],
+    "skills": [
+      "./skills"
     ]
   },
   "peerDependencies": {
@@ -42,6 +45,7 @@
   },
   "files": [
     "dist",
+    "skills",
     "README.md",
     "README.zh-CN.md",
     "CHANGELOG.md"

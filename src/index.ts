@@ -17,6 +17,8 @@ import { configReport, changePublishDir } from './config.js';
 import { changeProxy } from './proxy.js';
 import { runModelsCommand } from './model-cli.js';
 import { DEFAULT_SNAPSHOT_RETENTION, prunePublishedSnapshots } from './bundle.js';
+import { runAdd, runPublish } from './cli-add.js';
+import { doctor, doctorText, DOCTOR_USAGE } from './doctor.js';
 
 const HELP = `pi-manager ${VERSION} — Pi resource manager extension
 
@@ -24,6 +26,12 @@ Primary interface: type /manager INSIDE Pi. This CLI is optional/legacy.
   pi-manager install --yes                       Register extension bundle, then restart Pi
   pi-manager self-update --yes                   git pull the manager checkout, republish, restart Pi
   pi-manager migrate <profile> [agent-dir] --yes  Copy installed Pi packages into an empty staging profile
+
+  pi-manager add <source>... [--profile <name>] [--publish] [--dry-run] [--json] --yes
+                                                 Stage packages; --publish activates the next-start snapshot
+  pi-manager publish [--profile <name>] [--dry-run] [--json]
+                                                 Publish the active preset for the next Pi start
+  pi-manager doctor [--profile <name>] [--json]  Read-only drift report; also More → Doctor inside /manager
 
   pi-manager tui                                 Legacy standalone maintenance UI
   pi-manager profile list
@@ -70,6 +78,7 @@ Environment: PI_MANAGER_HOME, PI_MANAGER_PUBLISH_DIR, PI_MANAGER_PI, PI_MANAGER_
 
 Changes apply next launch. Resource/package commands do not mutate the default Pi/project config; the models command explicitly writes Pi's global model config.
 --yes acknowledges package code/install-script execution, destructive deletion, or running a model auth command.
+Agents: install Pi packages with "pi-manager add <source> --publish", not "pi install".
 `;
 const requireValue = (value: string | undefined, label: string): string => { if (!value) throw new Error(`${label} is required. See --help.`); return value; };
 const acknowledge = (args: string[]) => { if (!args.includes('--yes')) throw new Error('Explicit --yes required. Review third-party code and scripts, or the data being deleted.'); };
@@ -111,12 +120,39 @@ async function contextId(profile: string, name: string) {
   return item.id;
 }
 
+function parseProfileFlag(args: string[]): string | undefined {
+  let profile: string | undefined;
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === '--json') continue;
+    const inline = arg.startsWith('--profile=') ? arg.slice('--profile='.length) : undefined;
+    if (arg === '--profile' || inline !== undefined) {
+      profile = inline ?? args[++index];
+      if (!profile) throw new Error('--profile requires a preset name. See --help.');
+      continue;
+    }
+    throw new Error(`Unknown doctor option: ${arg}. See --help.`);
+  }
+  return profile;
+}
+
+async function runDoctor(args: string[]) {
+  if (args.includes('--help') || args.includes('-h')) return print(DOCTOR_USAGE);
+  const report = await doctor({ profile: parseProfileFlag(args) });
+  if (args.includes('--json')) console.log(JSON.stringify(report, null, 2));
+  else print(doctorText(report));
+  if (!report.ok) process.exitCode = 1;
+}
+
 export async function main(args: string[]) {
   const [command, subcommand, ...raw] = args;
   if (!command) return print(HELP);
   if (command === 'tui') return openTui();
   if (['help', '--help', '-h'].includes(command)) return print(HELP);
   if (['--version', '-v'].includes(command)) return print(VERSION);
+  if (command === 'add') return runAdd(args.slice(1));
+  if (command === 'publish') return runPublish(args.slice(1));
+  if (command === 'doctor') return runDoctor(args.slice(1));
   const rest = raw.filter(value => value !== '--yes' && value !== '--json');
   if (command === 'install') { acknowledge(args); return installPiExtension(true); }
   if (command === 'models') return runModelsCommand(args.slice(1));

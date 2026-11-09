@@ -6,8 +6,9 @@ import { inventory, importResource, previewResource, writeResource, removeResour
 import { packageOperation, inspectPackage, togglePackage, packageVersions, rollbackPackages } from './packages.js';
 import { migratePiPackages, sourcePiAgentDir } from './migration.js';
 import { selfUpdate } from './self-update.js';
-import { publishBundle, publishedBundle, BUNDLE_DIR } from './bundle.js';
+import { publishForPi, publishedBundle, BUNDLE_DIR } from './bundle.js';
 import type { LoadedBundle } from './bundle.js';
+import { doctor, doctorText } from './doctor.js';
 import { choose, view, working } from './pi-ui.js';
 import { dashboard, newDashboardState } from './dashboard.js';
 import type { DashboardEntry, DashboardModel, DashboardTab } from './dashboard.js';
@@ -38,7 +39,7 @@ export async function openManager(ctx: ExtensionCommandContext, loaded?: LoadedB
     if (!await ctx.ui.confirm('Use on next Pi start?', 'Exports a detached snapshot and declares its packages as pinned Git/npm sources. Restart Pi to load it; current extensions and context are unchanged. External local packages remain references.')) return;
     await mutate(async () => {
       const result = await working(ctx, 'Publishing package snapshot…', () =>
-        publishBundle(profile, { activate: true, agentDir: sourcePiAgentDir(), cwd: ctx.cwd }));
+        publishForPi(profile, { cwd: ctx.cwd }));
       const declared = result.declarations?.length ?? 0;
       notify(`Published ${result.profile || 'manager only'} for next Pi start${declared ? ` · ${declared} package declaration${declared === 1 ? '' : 's'} applied` : ''}. Restart Pi, do not expect hot unloading. Package: ${BUNDLE_DIR}`);
     });
@@ -166,6 +167,13 @@ export async function openManager(ctx: ExtensionCommandContext, loaded?: LoadedB
     const file = await choose(ctx, 'Package logs — review before sharing', files.map(value => ({ label: value, value })));
     if (file) await view(ctx, file, await readFile(join(profilePath(profile), '.operations', file), 'utf8'));
   };
+  const doctorPage = async () => {
+    // Read-only: no lock, no publication, no confirmation. Warnings stay
+    // advisory here; only blocking errors say the next start will not load.
+    const report = await working(ctx, 'Checking manager → Pi drift…', () => doctor(), false);
+    const title = report.ok ? 'pi-manager doctor — no blocking problems' : 'pi-manager doctor — fix before the next start';
+    await view(ctx, title, doctorText(report));
+  };
   const proxyPage = async () => {
     while (true) {
       const current = await proxySummary();
@@ -227,6 +235,7 @@ export async function openManager(ctx: ExtensionCommandContext, loaded?: LoadedB
     { id: 'profiles', label: 'Manage / switch presets' },
     { id: 'migrate', label: 'Import packages from current Pi' }, { id: 'update', label: 'Update all packages' },
     { id: 'versions', label: 'Package generations / restore' }, { id: 'logs', label: 'Package operation logs' },
+    { id: 'doctor', label: 'Doctor: check publication and Pi drift' },
     { id: 'proxy', label: 'Network proxy settings…' },
     { id: 'self-update', label: 'Update pi-manager from GitHub (git pull)' },
     { id: 'copy', label: 'Copy profile' }, { id: 'default', label: 'Set as default manager preset' },
@@ -336,6 +345,7 @@ export async function openManager(ctx: ExtensionCommandContext, loaded?: LoadedB
       else if (action.id === 'profiles') { const selected = await pickProfile(); if (selected) { profile = selected; state = newDashboardState(); changed(); } }
       else if (action.id === 'versions') await versionsPage(profile!);
       else if (action.id === 'logs') await logsPage(profile!);
+      else if (action.id === 'doctor') await doctorPage();
       else if (action.id === 'proxy') await proxyPage();
       else if (action.id === 'self-update') await guard(async () => {
         if (!await ctx.ui.confirm('Update pi-manager from GitHub?', 'Runs git pull --ff-only in the manager checkout, then republishes so the next Pi start still loads the same installation. Packages, resources and presets are not touched. Restart Pi afterwards.')) return;

@@ -230,6 +230,23 @@ export async function publishBundle(profile: string | null, options: PublishOpti
   return profile ? withProfileLock(profile, () => buildBundle(profile, options)) : buildBundle(null, options);
 }
 
+/** Publish and activate in one transaction: the single cutover shared by the
+ * `/manager` **P** key and `pi-manager publish`. Callers never pass an agent
+ * directory by hand, so both paths write to the same Pi install.
+ */
+export async function publishForPi(
+  profile: string | null,
+  options: { agentDir?: string; cwd?: string; install?: boolean; sdk?: PiSdk } = {},
+): Promise<LoadedBundle> {
+  return publishBundle(profile, {
+    activate: true,
+    install: options.install,
+    agentDir: options.agentDir ?? piAgentDir(),
+    cwd: options.cwd ?? process.cwd(),
+    sdk: options.sdk,
+  });
+}
+
 async function buildBundle(profile: string | null, options: PublishOptions = {}): Promise<LoadedBundle> {
   const id = `${Date.now()}-${randomUUID()}`;
   const root = await safePath(join(BUNDLE_DIR, '.snapshots', id));

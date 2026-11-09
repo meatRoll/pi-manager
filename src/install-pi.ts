@@ -16,7 +16,7 @@ import { errorMessage } from './errors.js';
  */
 export const DEFAULT_SELF_SOURCE = 'git:github.com/meatRoll/pi-manager';
 const selfSource = () => process.env.PI_MANAGER_SELF_SOURCE ?? DEFAULT_SELF_SOURCE;
-const looksLikeManager = (source: unknown) => typeof source === 'string' && /(?:^|[:\/])pi-manager(?:\.git)?$/.test(source);
+export const looksLikeManager = (source: unknown) => typeof source === 'string' && /(?:^|[:\/])pi-manager(?:\.git)?$/.test(source);
 
 /** A manager package declaration already in the Pi agent settings. */
 export async function hasManagerPackage(agentDir = sourcePiAgentDir()): Promise<boolean> {

@@ -1,5 +1,32 @@
 # Changelog
 
+## v2.0.0 — agents can install packages without the TUI
+
+`/manager` was the only path that could stage *and* publish, and the CLI stopped
+after staging, so an agent asked to install a package had no reachable action
+and fell back to `pi install` — which bypasses snapshots, generations and
+rollback. This release makes the same transaction callable headlessly, tells
+agents about it, and makes drift visible from both interfaces.
+
+- **`pi-manager add <source>… [--profile <name>] [--publish] [--json] --yes`**
+  stages npm/Git/local sources in a preset and, with `--publish`, activates the
+  snapshot for the next start. Without `--profile` it uses the saved default
+  preset and always reports which preset it used. `--yes` acknowledges
+  third-party code only and never implies `--publish`.
+- **`--dry-run`** on `add` and `publish` resolves sources, compares them with
+  the staged preset and the active publication, and writes nothing. It needs no
+  acknowledgement, so an agent can show a plan before running install scripts.
+- **`pi-manager publish`** is the CLI form of **P**. A failed `add --publish`
+  keeps the staged generation, returns `publishError` and exits non-zero.
+- **`pi-manager doctor [--json]`** is a read-only drift report: publication
+  state, package declarations written outside the manager, a missing snapshot,
+  a leftover profile lock, and a bundle registered for another
+  `PI_MANAGER_HOME`. The same report is in **More → Doctor** inside `/manager`.
+- The package now ships **`skills/pi-manager`** through `pi.skills`, so Pi
+  advertises it in every session. It routes "install a package / 装插件" to
+  `pi-manager add … --publish` and explicitly rules out `pi install`,
+  `pi remove` and hand-edited settings.
+
 ## v1.7.5 — A adds packages from every tab
 
 Pressing **A** on Extensions, Skills, Prompt templates or Themes jumped straight
@@ -265,6 +292,28 @@ The first stable release of **pi-manager**, a resource manager that runs inside 
 - 82 automated tests covering the dashboard, cancellation, migration, source-aware labels, publication, package recovery, isolation, and real Pi integration without model calls.
 
 ## 简体中文
+
+### v2.0.0 — agent 不必打开 TUI 也能装包
+
+此前只有 `/manager` 能同时完成「暂存 + 发布」，CLI 到暂存就停了。于是 agent
+被要求装包时没有任何可调用的动作，只能退回 `pi install` —— 绕过快照、generation
+和回滚。这个版本把这套事务变成可 headless 调用的，同时让 agent 知道它、让两个
+界面都能看见漂移。
+
+- **`pi-manager add <source>… [--profile <name>] [--publish] [--json] --yes`**
+  把 npm/Git/本地来源暂存进预设；带 `--publish` 时同时激活下一次 Pi 启动的快照。
+  不给 `--profile` 就用已保存的默认预设，并且总会报告实际用了哪个。`--yes` 只表示
+  接受第三方代码，不隐含 `--publish`。
+- **`--dry-run`**（`add` 与 `publish`）解析来源、与暂存预设和当前发布比较，不写
+  任何东西，也不需要 `--yes`，因此 agent 可以在执行安装脚本前先给出计划。
+- **`pi-manager publish`** 是 **P** 的命令行形式。`add --publish` 发布失败会保留
+  已暂存的 generation，返回 `publishError` 并非零退出。
+- **`pi-manager doctor [--json]`** 是只读漂移报告：发布状态、绕过管理器写入 Pi 的
+  包声明、快照缺失、残留的预设 `.lock`、bundle 注册在另一个 `PI_MANAGER_HOME` 下。
+  `/manager` 的 **More → Doctor** 展示同一份报告。
+- 包内通过 `pi.skills` 附带 **`skills/pi-manager`**，Pi 在每次会话都会宣告它。它把
+  “装包 / 装插件” 路由到 `pi-manager add … --publish`，并明确排除 `pi install`、
+  `pi remove` 和手改 settings。
 
 ### v1.7.5 — 每个页签按 A 都能加包
 
