@@ -37,9 +37,9 @@ export async function choose<T>(
       set focused(value: boolean) { focused = value; input.focused = focused && searching; },
       render(width: number) {
         const searchLine = searchable
-          ? [...(searching ? input.render(width) : [truncateToWidth(theme.fg('muted', `Search: ${input.getValue() || '( ↑ from first row )'}`), width)]), '']
+          ? [...(searching ? input.render(width) : [truncateToWidth(theme.fg('muted', `Search: ${input.getValue() || '( / to search )'}`), width)]), '']
           : [];
-        const footer = searchable ? '↑↓ select · Enter open · ↑ search · Esc back' : '↑↓ select · Enter open · Esc back';
+        const footer = searchable ? '↑↓ select · Enter open · / search · Esc back' : '↑↓ select · Enter open · Esc back';
         return [truncateToWidth(theme.fg('accent', plain(title)), width), '', ...searchLine,
           ...list.render(width).map(line => truncateToWidth(line, width)), '', truncateToWidth(theme.fg('dim', footer), width)];
       },
@@ -56,7 +56,8 @@ export async function choose<T>(
           searching = false; input.focused = false;
         } else if (searching) {
           input.handleInput(data); list = makeList(input.getValue());
-        } else if (up) {
+        } else if (matchesKey(data, Key.slash)) { searching = true; input.focused = focused; }
+        else if (up) {
           const index = visible.findIndex(item => item.value === list.getSelectedItem()?.value);
           if (index <= 0) { searching = true; input.focused = focused; }
           else list.handleInput(data);
@@ -158,9 +159,9 @@ export async function checklist<T>(ctx: ExtensionCommandContext, title: string, 
         if (height !== listHeight) rebuild();
         const count = selected.size;
         return [truncateToWidth(theme.fg('accent', plain(title)), width), '',
-          ...(searching ? input.render(width) : [truncateToWidth(theme.fg('muted', `Selected: ${count} · Search: ${query || '( ↑ from first row )'}`), width)]), '',
+          ...(searching ? input.render(width) : [truncateToWidth(theme.fg('muted', `Selected: ${count} · Search: ${query || '( / to search )'}`), width)]), '',
           ...list.render(width).map(line => truncateToWidth(line, width)), '',
-          truncateToWidth(theme.fg('dim', `${hint ? `${hint} · ` : ''}↑↓ move · Space toggle · A all · N none · ↑ search · Enter confirm · Esc cancel`), width)];
+          truncateToWidth(theme.fg('dim', `${hint ? `${hint} · ` : ''}↑↓ move · Space toggle · A all · N none · / search · Enter confirm · Esc cancel`), width)];
       },
       invalidate() { list.invalidate(); input.invalidate(); },
       handleInput(data: string) {
@@ -172,6 +173,7 @@ export async function checklist<T>(ctx: ExtensionCommandContext, title: string, 
         } else if (searching && matchesKey(data, Key.enter)) { searching = false; input.focused = false; }
         else if (searching && (up || down || pageUp || pageDown)) { searching = false; input.focused = false; }
         else if (searching) { input.handleInput(data); query = input.getValue(); rebuild(); }
+        else if (matchesKey(data, Key.slash)) { searching = true; input.focused = focused; input.setValue(query); }
         else if (up) {
           const index = filtered().findIndex(entry => String(entry.index) === list.getSelectedItem()?.value);
           if (index <= 0) { searching = true; input.focused = focused; input.setValue(query); }

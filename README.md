@@ -171,9 +171,9 @@ shortcuts, not rows in the lists, so **A** also works when a list is empty. In
 the model form, **Apply general config from model…** copies context, limits,
 modalities, thinking and sampling settings from another configured model while
 keeping the target's id, name, API, Base URL, headers and compatibility. On
-list pages, move **up from the first row** to focus the search box: type to
-filter, **Enter** leaves the box, and **Esc** clears the query or goes back. Edit
-and action menus omit the search box. There is no `/` search shortcut.
+list pages, press **`/`** to focus the search box from any row (moving **up from
+the first row** still works too): type to filter, **Enter** leaves the box, and
+**Esc** clears the query or goes back. Edit and action menus omit the search box.
 
 - Structured editors cover provider fields (`name`, `baseUrl`, `api`, headers,
   compatibility, OAuth, `authHeader`), models, and `modelOverrides`; an advanced

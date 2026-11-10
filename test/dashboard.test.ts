@@ -54,9 +54,7 @@ test('dashboard search keeps shortcuts literal while typing, preserves focus and
   const h = host(), state = newDashboardState();
   const result = dashboard(h.ctx, fixture(), state);
   const component = h.component(); component.focused = true;
-  component.handleInput!('/');
-  assert.equal(state.views.all?.query, ''); // slash no longer opens search
-  component.handleInput!('\x1b[A'); component.handleInput!('beta'); // Up from first row focuses search
+  component.handleInput!('\x1b[A'); component.handleInput!('beta'); // Up from first row still focuses search
   assert.ok(component.render(80).some(line => line.includes('中文 beta')));
   assert.equal(component.render(80).some(line => line.includes('alpha ·')), false);
   assert.equal(state.views.all?.query, 'beta');
@@ -71,6 +69,25 @@ test('dashboard search keeps shortcuts literal while typing, preserves focus and
   assert.ok(h.component().render(100).some(line => line.includes('alpha ·')));
   h.component().handleInput!('\x1b');
   assert.equal(await reopened, undefined);
+});
+
+test('dashboard reaches search from a deep row without walking back to the top', async () => {
+  const h = host(), state = newDashboardState(), model = fixture();
+  model.rows.all = Array.from({ length: 40 }, (_, index) => ({ id: `resource:${index}`, label: `[x] row ${index}`, toggle: true }));
+  const result = dashboard(h.ctx, model, state);
+  const component = h.component(); component.focused = true;
+  component.handleInput!('\x1b[6~'); component.handleInput!('\x1b[6~'); // page down into the list
+  assert.notEqual(state.views.all?.selected, 'resource:0');
+  assert.ok(component.render(100).some(line => line.includes('/ search')));
+  component.handleInput!('/'); // focus the box without pressing Up first
+  component.handleInput!('row 1');
+  assert.equal(state.views.all?.query, 'row 1');
+  const rendered = component.render(100).join('\n');
+  assert.ok(rendered.includes('row 1')); assert.ok(!rendered.includes('row 2'));
+  component.handleInput!('\r'); // Enter leaves the box and keeps the filter
+  assert.equal(state.views.all?.query, 'row 1');
+  component.handleInput!('\x1b'); component.handleInput!('\x1b');
+  assert.equal(await result, undefined);
 });
 
 test('dashboard shortcuts do not mutate read-only rows and emit actions only once', async () => {

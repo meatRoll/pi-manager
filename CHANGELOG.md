@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — `/` focuses the search box from any row
+
+Search was only reachable by pressing **↑** from the first row, so editing a
+filter deep in a long list of skills, models or rows meant scrolling all the way
+back to the top. **`/`** now focuses the search box from any row in `/manager`
+and in every chooser, matching the footer hint the documentation already
+advertised. Moving up from the first row still works.
+
 ## v2.1.0 — unmanaged packages can be adopted in one step
 
 `doctor` could only report this drift: a package Pi declared directly was outside

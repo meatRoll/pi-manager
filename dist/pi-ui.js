@@ -32,9 +32,9 @@ export async function choose(ctx, title, choices, options = {}) {
             set focused(value) { focused = value; input.focused = focused && searching; },
             render(width) {
                 const searchLine = searchable
-                    ? [...(searching ? input.render(width) : [truncateToWidth(theme.fg('muted', `Search: ${input.getValue() || '( ↑ from first row )'}`), width)]), '']
+                    ? [...(searching ? input.render(width) : [truncateToWidth(theme.fg('muted', `Search: ${input.getValue() || '( / to search )'}`), width)]), '']
                     : [];
-                const footer = searchable ? '↑↓ select · Enter open · ↑ search · Esc back' : '↑↓ select · Enter open · Esc back';
+                const footer = searchable ? '↑↓ select · Enter open · / search · Esc back' : '↑↓ select · Enter open · Esc back';
                 return [truncateToWidth(theme.fg('accent', plain(title)), width), '', ...searchLine,
                     ...list.render(width).map(line => truncateToWidth(line, width)), '', truncateToWidth(theme.fg('dim', footer), width)];
             },
@@ -64,6 +64,10 @@ export async function choose(ctx, title, choices, options = {}) {
                 else if (searching) {
                     input.handleInput(data);
                     list = makeList(input.getValue());
+                }
+                else if (matchesKey(data, Key.slash)) {
+                    searching = true;
+                    input.focused = focused;
                 }
                 else if (up) {
                     const index = visible.findIndex(item => item.value === list.getSelectedItem()?.value);
@@ -181,9 +185,9 @@ export async function checklist(ctx, title, items, hint = '') {
                     rebuild();
                 const count = selected.size;
                 return [truncateToWidth(theme.fg('accent', plain(title)), width), '',
-                    ...(searching ? input.render(width) : [truncateToWidth(theme.fg('muted', `Selected: ${count} · Search: ${query || '( ↑ from first row )'}`), width)]), '',
+                    ...(searching ? input.render(width) : [truncateToWidth(theme.fg('muted', `Selected: ${count} · Search: ${query || '( / to search )'}`), width)]), '',
                     ...list.render(width).map(line => truncateToWidth(line, width)), '',
-                    truncateToWidth(theme.fg('dim', `${hint ? `${hint} · ` : ''}↑↓ move · Space toggle · A all · N none · ↑ search · Enter confirm · Esc cancel`), width)];
+                    truncateToWidth(theme.fg('dim', `${hint ? `${hint} · ` : ''}↑↓ move · Space toggle · A all · N none · / search · Enter confirm · Esc cancel`), width)];
             },
             invalidate() { list.invalidate(); input.invalidate(); },
             handleInput(data) {
@@ -213,6 +217,11 @@ export async function checklist(ctx, title, items, hint = '') {
                     input.handleInput(data);
                     query = input.getValue();
                     rebuild();
+                }
+                else if (matchesKey(data, Key.slash)) {
+                    searching = true;
+                    input.focused = focused;
+                    input.setValue(query);
                 }
                 else if (up) {
                     const index = filtered().findIndex(entry => String(entry.index) === list.getSelectedItem()?.value);

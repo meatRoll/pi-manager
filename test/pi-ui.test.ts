@@ -20,8 +20,8 @@ test('native Pi selector searches, preserves focus, opens once and fits narrow/w
   const h = host();
   const result = choose(h.ctx, '管理器 / a long title', [{ label: 'alpha', value: 'a' }, { label: '中文 beta', value: 'b' }]);
   const component = h.component(); component.focused = true;
-  component.handleInput!('/');
-  component.handleInput!('\x1b[A'); component.handleInput!('beta'); // Up from first row focuses search
+  component.handleInput!('/'); // slash focuses the search box from any row
+  component.handleInput!('beta');
   for (const width of [12, 30, 90]) for (const line of component.render(width)) assert.ok(visibleWidth(line) <= width, line);
   component.handleInput!('\r'); // leave search without selecting
   component.handleInput!('\r');
@@ -48,12 +48,12 @@ test('native selector omits search for edit and action menus', async () => {
   assert.equal(await result, 'name');
 });
 
-test('native checklist focuses search by moving up from the first row without a slash shortcut', async () => {
+test('native checklist opens search with / or by moving up from the first row', async () => {
   const h = host();
   const result = checklist(h.ctx, 'Pick', [{ label: 'alpha', value: 'a' }, { label: 'beta', value: 'b' }]);
   const component = h.component(); component.focused = true;
-  component.handleInput!('/'); // slash no longer opens search
-  component.handleInput!('\x1b[A'); component.handleInput!('beta');
+  component.handleInput!('/'); // slash focuses the box without touching the filter
+  component.handleInput!('beta');
   const rendered = component.render(50).join('\n');
   assert.ok(rendered.includes('beta')); assert.ok(!rendered.includes('alpha'));
   component.handleInput!('\r'); // leave search

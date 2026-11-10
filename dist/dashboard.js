@@ -123,6 +123,9 @@ export async function dashboard(ctx, model, state, load) {
             list.setSelectedIndex(Math.max(0, Math.min(filtered.length - 1, index + offset)));
             saveSelection();
         };
+        // Reachable from any row, so a long list never has to be climbed back to
+        // the first row just to edit the filter.
+        const enterSearch = () => { searching = true; input.focused = focused; input.setValue(currentView().query); };
         const setModelPage = (page) => {
             saveSelection();
             state.modelPage = page;
@@ -154,10 +157,10 @@ export async function dashboard(ctx, model, state, load) {
                         ? ['Enter run action']
                         : [row.toggle ? 'Space toggle' : '', compact ? 'Enter actions' : 'Enter preview / actions', row.editable ? 'E edit' : '', row.deletable ? 'Del delete' : ''];
             const lines = compact
-                ? [[`[${tabLabel(state.tab)}]`, '←→ Tab', '↑↓ select'], rowKeys, [...panel, ...presetKey, '↑ search', closeKey]]
+                ? [[`[${tabLabel(state.tab)}]`, '←→ Tab', '↑↓ select'], rowKeys, [...panel, ...presetKey, '/ search', closeKey]]
                 : state.tab === 'models'
-                    ? [['↑↓ select', '←→ / Tab category', ...rowKeys], [...panel, '↑ search', closeKey]]
-                    : [['↑↓ select', '←→ / Tab category', ...rowKeys], [...panel, 'S switch preset', 'R refresh', '↑ search', 'Esc close']];
+                    ? [['↑↓ select', '←→ / Tab category', ...rowKeys], [...panel, '/ search', closeKey]]
+                    : [['↑↓ select', '←→ / Tab category', ...rowKeys], [...panel, 'S switch preset', 'R refresh', '/ search', 'Esc close']];
             return lines.map(line).filter(Boolean).flatMap(text => wrapTextWithAnsi(text, width));
         };
         const renderTabs = (width) => {
@@ -201,7 +204,7 @@ export async function dashboard(ctx, model, state, load) {
                         ? [theme.fg('muted', lineText(model.globalDetail || 'global model configuration'))]
                         : [theme.fg('muted', lineText(model.loading)), theme.fg(model.pending ? 'warning' : 'muted', lineText(model.publication))]),
                     renderTabs(width),
-                    ...(searching ? input.render(width) : [theme.fg('dim', `Search: ${lineText(currentView().query) || '( ↑ from first row )'}`)]), ''];
+                    ...(searching ? input.render(width) : [theme.fg('dim', `Search: ${lineText(currentView().query) || '( / to search )'}`)]), ''];
                 // Leave room for Pi's editor/footer and the SelectList scroll indicator.
                 height = Math.max(1, Math.min(12, (process.stdout.rows || 24) - header.length - hints.length - 8));
                 if (height !== listHeight)
@@ -250,13 +253,12 @@ export async function dashboard(ctx, model, state, load) {
                     currentView().query = input.getValue();
                     rebuild();
                 }
+                else if (matchesKey(data, Key.slash))
+                    enterSearch();
                 else if (up) {
                     const index = filtered.findIndex(row => row.id === list.getSelectedItem()?.value);
-                    if (index <= 0) {
-                        searching = true;
-                        input.focused = focused;
-                        input.setValue(currentView().query);
-                    }
+                    if (index <= 0)
+                        enterSearch();
                     else
                         move(-1);
                 }
