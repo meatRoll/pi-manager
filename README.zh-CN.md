@@ -2,7 +2,7 @@
 
 [English](README.md) | **简体中文**
 
-**v2.1.0 — 一步收编 Pi 直接声明、不在发布范围内的包：More → Doctor 或 CLI。** [版本说明](CHANGELOG.md#简体中文) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
+**v2.2.0 — 在 `/manager` 和每个选择器的任意一行按 `/` 即可聚焦搜索框。** [版本说明](CHANGELOG.md#简体中文) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
 
 一个**在 Pi 里面使用的扩展**，管理插件包、Skills、Extensions、提示词模板、主题、预置 Markdown 上下文，以及 Pi 的全局模型配置。
 

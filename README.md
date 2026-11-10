@@ -2,7 +2,7 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-**v2.1.0 — adopt packages that Pi declares outside the publication in one step, from More → Doctor or the CLI.** [Release notes](CHANGELOG.md) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
+**v2.2.0 — `/` focuses the search box from any row, in `/manager` and every chooser.** [Release notes](CHANGELOG.md) · [GitHub Releases](https://github.com/meatRoll/pi-manager/releases)
 
 A **Pi extension** for managing packages, skills, extensions, prompt templates, themes, preset Markdown context, and Pi's global model configuration **inside Pi**.
 

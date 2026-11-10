@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — `/` focuses the search box from any row
+## v2.2.0 — The search box opens from any row with `/`
 
 Search was only reachable by pressing **↑** from the first row, so editing a
 filter deep in a long list of skills, models or rows meant scrolling all the way
@@ -317,6 +317,12 @@ The first stable release of **pi-manager**, a resource manager that runs inside 
 - 82 automated tests covering the dashboard, cancellation, migration, source-aware labels, publication, package recovery, isolation, and real Pi integration without model calls.
 
 ## 简体中文
+
+### v2.2.0 — 任意一行按 `/` 就能聚焦搜索框
+
+以前只能在第一行按 **↑** 才进得了搜索框，所以在 skills、models 或任何长列表里改
+过滤器，都得先滚回顶部。现在在 `/manager` 和每个选择器里，任意一行按 **`/`** 都能
+聚焦搜索框，与文档早已写明的页脚提示一致；从第一行按 ↑ 的方式仍然可用。
 
 ### v2.1.0 — 不在管理器管辖下的包可以一步收编
 
